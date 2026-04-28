@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Минер</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app" role="application" aria-label="Минер">
+      <section id="menuScreen" class="menuScreen">
+        <div class="menuCard">
+          <h1 class="menuTitle">Минер</h1>
+
+          <label class="menuField">
+            <span class="menuLabel">Сложность</span>
+            <select id="presetSelect" class="menuSelect" aria-label="Сложность">
+              <option value="beginner">Новичок (9x9, 10)</option>
+              <option value="intermediate">Средний (16x16, 40)</option>
+              <option value="expert">Эксперт (30x16, 99)</option>
+              <option value="custom">Свое поле</option>
+            </select>
+          </label>
+
+          <button id="recordsBtn" class="btn menuBtn" type="button">Рекорды</button>
+          <button id="toggleCustomBtn" class="btn menuBtn" type="button">Создай свое поле</button>
+
+          <div class="custom menuCustom" id="customControls" hidden>
+            <label class="field menuInputField">
+              <span>Ширина</span>
+              <input id="customW" inputmode="numeric" type="number" min="5" max="60" value="16" />
+            </label>
+            <label class="field menuInputField">
+              <span>Высота</span>
+              <input id="customH" inputmode="numeric" type="number" min="5" max="40" value="16" />
+            </label>
+            <label class="field menuInputField">
+              <span>Мины</span>
+              <input id="customM" inputmode="numeric" type="number" min="1" max="500" value="40" />
+            </label>
+          </div>
+
+          <button id="playBtn" class="btn primary menuPlayBtn" type="button">Играть</button>
+        </div>
+      </section>
+
+      <section id="gameScreen" class="gameScreen" hidden>
+        <header class="topbar">
+          <button class="iconBtn hintAction" id="hintBtn" type="button" aria-label="Подсказка" title="Выбрать закрытую клетку для подсказки">
+            <svg viewBox="0 0 24 24" class="hintIcon" aria-hidden="true">
+              <path d="M9 18h6" />
+              <path d="M10 21h4" />
+              <path d="M12 3a6 6 0 0 0-3.9 10.56c.52.46.9.93 1.14 1.44h5.52c.24-.51.62-.98 1.14-1.44A6 6 0 0 0 12 3Z" />
+            </svg>
+          </button>
+
+          <div class="panel">
+            <div class="counter" id="minesCounter" aria-label="Осталось мин">000</div>
+            <button class="face" id="faceBtn" type="button" aria-label="Новая игра" title="Новая игра">
+              🙂
+            </button>
+            <div class="counter" id="timeCounter" aria-label="Время">000</div>
+          </div>
+
+          <div class="controls">
+            <button id="menuBtn" class="btn" type="button">Меню</button>
+          </div>
+        </header>
+
+        <main class="stage" aria-label="Игровое поле">
+          <canvas id="board" class="board" aria-label="Поле сапера"></canvas>
+          <div id="hint" class="hint" aria-hidden="true">
+            <div class="hintBox">
+              <div class="hintTitle">Управление</div>
+              <div class="hintBody">
+                <div><kbd>ЛКМ</kbd> открыть</div>
+                <div><kbd>ПКМ</kbd> флажок</div>
+                <div><kbd>Долгое нажатие</kbd> флажок (тач)</div>
+                <div><kbd>Клик по цифре</kbd> открыть вокруг</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="victoryModal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Победа">
+            <div class="modalCard" role="document">
+              <div class="modalTop">
+                <div class="modalTitle">Победа!</div>
+                <button id="victoryClose" class="iconBtn" type="button" aria-label="Закрыть">×</button>
+              </div>
+
+              <div class="modalArt" aria-hidden="true">
+                <svg viewBox="0 0 420 180" width="100%" height="100%">
+                  <defs>
+                    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stop-color="#ffffff" stop-opacity=".20" />
+                      <stop offset="1" stop-color="#ffffff" stop-opacity=".02" />
+                    </linearGradient>
+                  </defs>
+                  <rect x="10" y="12" width="280" height="156" rx="18" fill="url(#g1)" stroke="rgba(255,255,255,.18)" />
+                  <g transform="translate(34 36)">
+                    <rect x="0" y="0" width="232" height="108" rx="12" fill="rgba(0,0,0,.22)" stroke="rgba(255,255,255,.10)"/>
+                    <g>
+                      <rect x="12" y="12" width="40" height="40" rx="8" fill="#b7bed4" stroke="#8f97b3"/>
+                      <text x="32" y="38" text-anchor="middle" font-size="22" font-weight="800" fill="#2b6cff">1</text>
+                      <rect x="60" y="12" width="40" height="40" rx="8" fill="#b7bed4" stroke="#8f97b3"/>
+                      <text x="80" y="38" text-anchor="middle" font-size="22" font-weight="800" fill="#2dbb55">2</text>
+                      <rect x="108" y="12" width="40" height="40" rx="8" fill="#c8cedf" />
+                      <rect x="156" y="12" width="40" height="40" rx="8" fill="#c8cedf" />
+                      <path d="M176 22 v28" stroke="#12151f" stroke-width="5" stroke-linecap="round"/>
+                      <path d="M176 22 L196 34 L176 46 Z" fill="#ff3b4f"/>
+                      <circle cx="176" cy="54" r="6" fill="#12151f"/>
+                      <rect x="12" y="60" width="40" height="40" rx="8" fill="#b7bed4" stroke="#8f97b3"/>
+                      <text x="32" y="86" text-anchor="middle" font-size="22" font-weight="800" fill="#ff3b4f">3</text>
+                      <rect x="60" y="60" width="40" height="40" rx="8" fill="#b7bed4" stroke="#8f97b3"/>
+                      <text x="80" y="86" text-anchor="middle" font-size="22" font-weight="800" fill="#2f4bff">4</text>
+                      <rect x="108" y="60" width="40" height="40" rx="8" fill="#b7bed4" stroke="#8f97b3"/>
+                      <text x="128" y="86" text-anchor="middle" font-size="22" font-weight="800" fill="#8a2be2">5</text>
+                      <rect x="156" y="60" width="40" height="40" rx="8" fill="#b7bed4" stroke="#8f97b3"/>
+                      <text x="176" y="86" text-anchor="middle" font-size="22" font-weight="800" fill="#2bb7c2">6</text>
+                    </g>
+                  </g>
+
+                  <g transform="translate(305 24)">
+                    <rect x="0" y="0" width="105" height="132" rx="18" fill="rgba(110,168,254,.18)" stroke="rgba(110,168,254,.35)" />
+                    <text x="52.5" y="86" text-anchor="middle" font-size="70">👍</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="modalText">
+                <div class="modalStat">
+                  Время: <span id="victoryTime" class="statVal">000</span>
+                </div>
+                <div class="modalStat">
+                  Поле: <span id="victoryBoard" class="statVal">9x9 • 10 мин</span>
+                </div>
+              </div>
+
+              <div class="modalActions">
+                <button id="victoryAgain" class="btn primary" type="button">Играть ещё</button>
+                <button id="victoryOk" class="btn" type="button">ОК</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="lossModal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Поражение">
+            <div class="modalCard" role="document">
+              <div class="modalTop">
+                <div class="modalTitle">Бум!</div>
+                <button id="lossClose" class="iconBtn" type="button" aria-label="Закрыть">×</button>
+              </div>
+
+              <div class="modalArt" aria-hidden="true">
+                <svg viewBox="0 0 420 180" width="100%" height="100%">
+                  <defs>
+                    <radialGradient id="boomG" cx="50%" cy="50%" r="60%">
+                      <stop offset="0" stop-color="#ff5c78" stop-opacity=".55" />
+                      <stop offset=".55" stop-color="#ffb24d" stop-opacity=".35" />
+                      <stop offset="1" stop-color="#000000" stop-opacity="0" />
+                    </radialGradient>
+                    <linearGradient id="cardG" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stop-color="#ffffff" stop-opacity=".16" />
+                      <stop offset="1" stop-color="#ffffff" stop-opacity=".02" />
+                    </linearGradient>
+                  </defs>
+                  <rect x="10" y="12" width="400" height="156" rx="18" fill="url(#cardG)" stroke="rgba(255,255,255,.16)" />
+                  <circle cx="155" cy="92" r="70" fill="url(#boomG)"/>
+                  <g transform="translate(110 48)">
+                    <circle cx="45" cy="45" r="22" fill="#12151f"/>
+                    <g stroke="#12151f" stroke-width="6" stroke-linecap="round">
+                      <path d="M45 12 V2"/>
+                      <path d="M45 88 V78"/>
+                      <path d="M12 45 H2"/>
+                      <path d="M88 45 H78"/>
+                      <path d="M16 16 L8 8"/>
+                      <path d="M74 74 L82 82"/>
+                      <path d="M74 16 L82 8"/>
+                      <path d="M16 74 L8 82"/>
+                    </g>
+                    <circle cx="38" cy="38" r="6" fill="rgba(255,255,255,.22)"/>
+                  </g>
+                  <g transform="translate(255 36)">
+                    <text x="0" y="64" font-size="56">😵</text>
+                    <text x="64" y="64" font-size="56">💥</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="modalText">
+                <div class="modalStat">
+                  Время: <span id="lossTime" class="statVal">000</span>
+                </div>
+                <div class="modalStat">
+                  Поле: <span id="lossBoard" class="statVal">9x9 • 10 мин</span>
+                </div>
+              </div>
+
+              <div class="modalActions">
+                <button id="lossAgain" class="btn primary" type="button">Ещё раз</button>
+                <button id="lossOk" class="btn" type="button">ОК</button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </section>
+
+      <div id="recordsModal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Рекорды">
+        <div class="modalCard recordsCard" role="document">
+          <div class="modalTop">
+            <div class="modalTitle">Рекорды</div>
+            <button id="recordsClose" class="iconBtn" type="button" aria-label="Закрыть">×</button>
+          </div>
+          <div class="recordsBody">
+            <div id="recordsName" class="recordsName"></div>
+            <div id="recordsValue" class="recordsValue"></div>
+          </div>
+          <div class="modalActions">
+            <button id="recordsOk" class="btn primary" type="button">ОК</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./game.js"></script>
+  </body>
+</html>
