@@ -41,6 +41,17 @@
   const lossBoard = document.getElementById('lossBoard');
 
   const ctx = canvas.getContext('2d', { alpha: false });
+  const resultsEndpoint = String(window.SAPER_RESULTS_URL || '').trim();
+
+  const yandex = {
+    ysdk: null,
+    player: null,
+    initPromise: null,
+    playerPromise: null,
+    loadingReadySent: false,
+    adShowing: false,
+    gameplayActive: false,
+  };
 
   const PRESETS = {
     beginner: { w: 9, h: 9, m: 10, label: 'Новичок' },
@@ -59,6 +70,167 @@
     '#12151f',
     '#7b8198',
   ];
+
+  function initYandexSdk() {
+    if (yandex.initPromise) return yandex.initPromise;
+    if (!window.YaGames || typeof window.YaGames.init !== 'function') {
+      yandex.initPromise = Promise.resolve(null);
+      return yandex.initPromise;
+    }
+
+    yandex.initPromise = window.YaGames.init()
+      .then((ysdk) => {
+        yandex.ysdk = ysdk;
+        notifyGameReady();
+        loadYandexPlayer();
+        return ysdk;
+      })
+      .catch((err) => {
+        console.warn('Yandex Games SDK init failed', err);
+        return null;
+      });
+
+    return yandex.initPromise;
+  }
+
+  function notifyGameReady() {
+    if (yandex.loadingReadySent || !yandex.ysdk) return;
+    try {
+      yandex.ysdk.features?.LoadingAPI?.ready?.();
+      yandex.loadingReadySent = true;
+    } catch (err) {
+      console.warn('Yandex LoadingAPI.ready failed', err);
+    }
+  }
+
+  function loadYandexPlayer() {
+    if (!yandex.ysdk || yandex.playerPromise || typeof yandex.ysdk.getPlayer !== 'function') return yandex.playerPromise;
+    yandex.playerPromise = yandex.ysdk
+      .getPlayer({ signed: true })
+      .then((player) => {
+        yandex.player = player;
+        return player;
+      })
+      .catch((err) => {
+        console.warn('Yandex player init failed', err);
+        return null;
+      });
+    return yandex.playerPromise;
+  }
+
+  function startGameplayMarkup() {
+    if (!yandex.ysdk || yandex.gameplayActive || yandex.adShowing || state.screen !== 'game' || state.over) return;
+    try {
+      yandex.ysdk.features?.GameplayAPI?.start?.();
+      yandex.gameplayActive = true;
+    } catch (err) {
+      console.warn('Yandex GameplayAPI.start failed', err);
+    }
+  }
+
+  function stopGameplayMarkup() {
+    if (!yandex.ysdk || !yandex.gameplayActive) return;
+    try {
+      yandex.ysdk.features?.GameplayAPI?.stop?.();
+    } catch (err) {
+      console.warn('Yandex GameplayAPI.stop failed', err);
+    } finally {
+      yandex.gameplayActive = false;
+    }
+  }
+
+  function showNewGameAd() {
+    initYandexSdk().then((ysdk) => {
+      if (!ysdk?.adv || yandex.adShowing) {
+        startGameplayMarkup();
+        return;
+      }
+
+      stopGameplayMarkup();
+      yandex.adShowing = true;
+
+      const finishAd = () => {
+        yandex.adShowing = false;
+        startGameplayMarkup();
+      };
+
+      try {
+        ysdk.adv.showFullscreenAdv({
+          callbacks: {
+            onOpen: stopGameplayMarkup,
+            onClose: finishAd,
+            onError: (err) => {
+              console.warn('Yandex fullscreen ad failed', err);
+              finishAd();
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('Yandex fullscreen ad failed', err);
+        finishAd();
+      }
+    });
+  }
+
+  function getPlayerPayload() {
+    const player = yandex.player;
+    if (!player) return null;
+
+    const payload = {};
+    try {
+      if (typeof player.getUniqueID === 'function') payload.uniqueId = player.getUniqueID();
+      if (typeof player.getName === 'function') payload.name = player.getName();
+      if (typeof player.isAuthorized === 'function') payload.authorized = player.isAuthorized();
+      if (player.signature) payload.signature = player.signature;
+    } catch (err) {
+      console.warn('Yandex player payload failed', err);
+    }
+    return payload;
+  }
+
+  function sendWinResult() {
+    if (!resultsEndpoint) {
+      console.info('Set window.SAPER_RESULTS_URL to send win results to Yandex Cloud.');
+      return;
+    }
+
+    Promise.resolve(yandex.playerPromise)
+      .catch(() => null)
+      .then(() => {
+        const payload = {
+          event: 'win',
+          wonAt: new Date().toISOString(),
+          difficulty: state.currentPreset,
+          recordKey: state.currentRecordKey,
+          board: {
+            width: state.w,
+            height: state.h,
+            mines: state.mines,
+            label: boardLabel(),
+          },
+          result: {
+            timeSec: state.timeSec,
+            flags: state.flags,
+          },
+          yandexPlayer: getPlayerPayload(),
+        };
+
+        return fetch(resultsEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        });
+      })
+      .then((response) => {
+        if (response && !response.ok) {
+          console.warn('Yandex Cloud result upload failed', response.status, response.statusText);
+        }
+      })
+      .catch((err) => {
+        console.warn('Yandex Cloud result upload failed', err);
+      });
+  }
 
   const state = {
     w: 9,
@@ -238,6 +410,7 @@
 
   function showMenu() {
     state.screen = 'menu';
+    stopGameplayMarkup();
     stopTimer();
     clearHint();
     hideVictoryModal();
@@ -249,6 +422,7 @@
 
   function showGame() {
     state.screen = 'game';
+    initYandexSdk();
     menuScreen.hidden = true;
     gameScreen.hidden = false;
     requestAnimationFrame(() => {
@@ -523,10 +697,12 @@
     state.over = true;
     state.won = won;
     clearHint();
+    stopGameplayMarkup();
     stopTimer();
 
     if (won) {
       saveRecordIfNeeded();
+      sendWinResult();
       setFace('😎');
       for (const c of state.grid) {
         if (c.mine && !c.flagged) {
@@ -559,6 +735,7 @@
   }
 
   function newGame(w, h, m, recordKey, presetKey) {
+    stopGameplayMarkup();
     state.w = clamp(w | 0, 5, 60);
     state.h = clamp(h | 0, 5, 40);
     state.mines = clamp(m | 0, 1, Math.max(1, state.w * state.h - 1));
@@ -581,6 +758,7 @@
     hideLossModal();
     resize();
     draw();
+    showNewGameAd();
   }
 
   function startSelectedGame() {
@@ -976,5 +1154,6 @@
   });
 
   updateCustomVisibility();
+  initYandexSdk();
   showMenu();
 })();
