@@ -39,6 +39,14 @@ body{
 .menuScreen{
   display:grid;
   place-items:center;
+  position:relative;
+  isolation:isolate;
+  margin:calc(-1 * max(10px, env(safe-area-inset-top))) calc(-1 * max(10px, env(safe-area-inset-right))) calc(-1 * max(10px, env(safe-area-inset-bottom))) calc(-1 * max(10px, env(safe-area-inset-left)));
+  padding:max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  background:
+    linear-gradient(90deg, rgba(7,8,12,.82), rgba(7,8,12,.42) 45%, rgba(7,8,12,.80)),
+    linear-gradient(180deg, rgba(7,8,12,.30), rgba(7,8,12,.74)),
+    url("./assets/back2.png") center / cover no-repeat;
 }
 
 .gameScreen{
@@ -167,15 +175,34 @@ body{
   gap:10px;
   flex-wrap:wrap;
   justify-self:end;
+  margin-right:18px;
 }
 
-.hintAction{
+#menuBtn{
+  min-height:46px;
+  padding:10px 18px;
+  border-color:rgba(110,168,254,.62);
+  border-radius:13px;
+  background:linear-gradient(180deg, rgba(110,168,254,.36), rgba(64,111,206,.18));
+  box-shadow:0 0 0 1px rgba(110,168,254,.14), 0 10px 24px rgba(20,46,112,.22);
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:.02em;
+}
+
+.hintControl{
   grid-column:1;
   grid-row:1;
   justify-self:start;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-left:16px;
+}
+
+.hintAction{
   width:54px;
   height:54px;
-  margin-left:16px;
   border-radius:12px;
   background:linear-gradient(180deg, rgba(110,168,254,.24), rgba(110,168,254,.08));
 }
@@ -202,6 +229,16 @@ body{
   stroke-linecap:round;
   stroke-linejoin:round;
   filter:drop-shadow(0 0 8px rgba(255,227,138,.24));
+}
+.hintText{
+  max-width:160px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.25;
+  user-select:none;
+}
+.hintText.isWarn{
+  color:#ffe38a;
 }
 
 .field{
@@ -337,6 +374,9 @@ kbd{
   font-size:18px;
   font-weight:800;
 }
+#lossModal .modalTitle::after{
+  content:" Поражение";
+}
 .iconBtn{
   width:36px;
   height:36px;
@@ -349,6 +389,52 @@ kbd{
 .iconBtn:active{transform:translateY(1px)}
 .modalArt{
   padding:12px 14px 2px 14px;
+}
+#victoryModal .modalArt,
+#lossModal .modalArt{
+  position:relative;
+  height:210px;
+  margin:12px 14px 2px 14px;
+  padding:0;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.12);
+  background-position:center;
+  background-size:cover;
+  background-repeat:no-repeat;
+  overflow:hidden;
+}
+#victoryModal .modalArt::after,
+#lossModal .modalArt::after{
+  position:absolute;
+  right:14px;
+  bottom:12px;
+  width:86px;
+  height:86px;
+  display:grid;
+  place-items:center;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.20);
+  background:rgba(10,12,18,.58);
+  box-shadow:0 12px 34px rgba(0,0,0,.38);
+  font-size:58px;
+  line-height:1;
+  backdrop-filter:blur(5px);
+}
+#victoryModal .modalArt::after{
+  content:"👍";
+}
+#lossModal .modalArt::after{
+  content:"👎";
+}
+#victoryModal .modalArt{
+  background-image:linear-gradient(180deg, rgba(0,0,0,.04), rgba(0,0,0,.18)), url("./assets/victory.jpg");
+}
+#lossModal .modalArt{
+  background-image:linear-gradient(180deg, rgba(0,0,0,.04), rgba(0,0,0,.20)), url("./assets/defeat.jpg");
+}
+#victoryModal .modalArt svg,
+#lossModal .modalArt svg{
+  display:none;
 }
 .modalText{
   padding:8px 14px 0 14px;
@@ -410,14 +496,17 @@ kbd{
     order:1;
     width:100%;
   }
-  .hintAction,
+  .hintControl,
   .controls{
     grid-column:auto;
     grid-row:auto;
     justify-self:start;
   }
-  .hintAction{
+  .hintControl{
     margin-left:0;
+  }
+  .controls{
+    margin-right:0;
   }
   .counter{width:84px}
   .hint{display:none}

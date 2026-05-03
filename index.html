@@ -49,13 +49,16 @@
 
       <section id="gameScreen" class="gameScreen" hidden>
         <header class="topbar">
-          <button class="iconBtn hintAction" id="hintBtn" type="button" aria-label="Подсказка" title="Выбрать закрытую клетку для подсказки">
-            <svg viewBox="0 0 24 24" class="hintIcon" aria-hidden="true">
-              <path d="M9 18h6" />
-              <path d="M10 21h4" />
-              <path d="M12 3a6 6 0 0 0-3.9 10.56c.52.46.9.93 1.14 1.44h5.52c.24-.51.62-.98 1.14-1.44A6 6 0 0 0 12 3Z" />
-            </svg>
-          </button>
+          <div class="hintControl">
+            <button class="iconBtn hintAction" id="hintBtn" type="button" aria-label="Подсказка" title="Посмотрите рекламу и выберите закрытую клетку для подсказки">
+              <svg viewBox="0 0 24 24" class="hintIcon" aria-hidden="true">
+                <path d="M9 18h6" />
+                <path d="M10 21h4" />
+                <path d="M12 3a6 6 0 0 0-3.9 10.56c.52.46.9.93 1.14 1.44h5.52c.24-.51.62-.98 1.14-1.44A6 6 0 0 0 12 3Z" />
+              </svg>
+            </button>
+            <div class="hintText" id="hintText">Подсказка после рекламы</div>
+          </div>
 
           <div class="panel">
             <div class="counter" id="minesCounter" aria-label="Осталось мин">000</div>

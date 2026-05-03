@@ -24,6 +24,7 @@
   const timeEl = document.getElementById('timeCounter');
   const faceBtn = document.getElementById('faceBtn');
   const hintBtn = document.getElementById('hintBtn');
+  const hintText = document.getElementById('hintText');
   const panelEl = document.querySelector('.panel');
 
   const victoryModal = document.getElementById('victoryModal');
@@ -42,6 +43,17 @@
 
   const ctx = canvas.getContext('2d', { alpha: false });
   const resultsEndpoint = String(window.SAPER_RESULTS_URL || '').trim();
+  const outcomeSounds = {
+    defeat: new Audio('./assets/sounds/defeat.mpeg'),
+    victory: new Audio('./assets/sounds/game-won.mp3'),
+  };
+  const musicTracks = [
+    new Audio('./assets/sounds/1.mp3'),
+    new Audio('./assets/sounds/2.mp3'),
+    new Audio('./assets/sounds/3.mp3'),
+  ];
+  let currentMusicIndex = -1;
+  let musicEnabled = false;
 
   const yandex = {
     ysdk: null,
@@ -172,6 +184,54 @@
     });
   }
 
+  function showRewardedHintAd() {
+    if (yandex.adShowing) return Promise.resolve({ rewarded: false });
+
+    return initYandexSdk().then((ysdk) => new Promise((resolve) => {
+      if (!ysdk?.adv || typeof ysdk.adv.showRewardedVideo !== 'function') {
+        resolve({ rewarded: false, error: true });
+        return;
+      }
+
+      let settled = false;
+      let rewarded = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        yandex.adShowing = false;
+        startGameplayMarkup();
+        resolve(result);
+      };
+
+      stopGameplayMarkup();
+      yandex.adShowing = true;
+
+      try {
+        ysdk.adv.showRewardedVideo({
+          callbacks: {
+            onOpen: () => {
+              stopGameplayMarkup();
+              setHintText('Смотрите рекламу до конца');
+            },
+            onRewarded: () => {
+              rewarded = true;
+            },
+            onClose: () => {
+              finish({ rewarded });
+            },
+            onError: (err) => {
+              console.warn('Yandex rewarded ad failed', err);
+              finish({ rewarded: false, error: true });
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('Yandex rewarded ad failed', err);
+        finish({ rewarded: false, error: true });
+      }
+    }));
+  }
+
   function getPlayerPayload() {
     const player = yandex.player;
     if (!player) return null;
@@ -264,6 +324,7 @@
     animRaf: /** @type {number|null} */ (null),
 
     hintMode: false,
+    hintAdPending: false,
     hintPreview: /** @type {{x:number,y:number}|null} */ (null),
     hintPreviewId: /** @type {number | null} */ (null),
     minesPlaced: false,
@@ -322,9 +383,16 @@
     timeEl.textContent = fmt3(state.timeSec);
   }
 
+  function setHintText(text, warn = false) {
+    if (!hintText) return;
+    hintText.textContent = text;
+    hintText.classList.toggle('isWarn', warn);
+  }
+
   function syncHintButton() {
     if (!hintBtn) return;
     hintBtn.classList.toggle('isActive', state.hintMode);
+    hintBtn.disabled = state.hintAdPending;
   }
 
   function clearHintPreview() {
@@ -342,6 +410,7 @@
 
   function clearHint() {
     stopHintMode();
+    setHintText('Подсказка после рекламы');
     clearHintPreview();
   }
 
@@ -351,9 +420,39 @@
     state.minesPlaced = true;
   }
 
-  function startHintMode() {
-    if (state.over || state.screen !== 'game') return;
-    state.hintMode = !state.hintMode;
+  async function startHintMode() {
+    if (state.over || state.screen !== 'game' || state.hintAdPending) return;
+    if (state.hintMode) {
+      state.hintMode = false;
+      setHintText('Подсказка после рекламы');
+      syncHintButton();
+      draw();
+      return;
+    }
+
+    state.hintAdPending = true;
+    setHintText('Загружаем рекламу...', true);
+    syncHintButton();
+
+    const adResult = await showRewardedHintAd();
+    state.hintAdPending = false;
+    if (state.over || state.screen !== 'game') {
+      setHintText('Подсказка после рекламы');
+      syncHintButton();
+      return;
+    }
+
+    if (!adResult.rewarded) {
+      setHintText(adResult.error ? 'Реклама недоступна' : 'Нужно досмотреть рекламу', true);
+      syncHintButton();
+      window.setTimeout(() => {
+        if (!state.hintMode && !state.hintAdPending) setHintText('Подсказка после рекламы');
+      }, 1800);
+      return;
+    }
+
+    state.hintMode = true;
+    setHintText('Выберите закрытую клетку');
     clearHintPreview();
     syncHintButton();
     draw();
@@ -366,6 +465,7 @@
 
     ensureMinesPlaced(x, y);
     state.hintPreview = { x, y };
+    setHintText('Подсказка после рекламы');
     stopHintMode();
     if (state.hintPreviewId != null) clearTimeout(state.hintPreviewId);
     state.hintPreviewId = setTimeout(() => {
@@ -412,6 +512,7 @@
     state.screen = 'menu';
     stopGameplayMarkup();
     stopTimer();
+    stopGameMusic();
     clearHint();
     hideVictoryModal();
     hideLossModal();
@@ -552,6 +653,72 @@
       clearInterval(state.timerId);
       state.timerId = null;
     }
+  }
+
+  function stopOutcomeSounds() {
+    Object.values(outcomeSounds).forEach((sound) => {
+      sound.pause();
+      sound.currentTime = 0;
+    });
+  }
+
+  function playOutcomeSound(type) {
+    const sound = outcomeSounds[type];
+    if (!sound) return;
+    stopOutcomeSounds();
+    sound.currentTime = 0;
+    sound.play().catch((err) => {
+      console.warn('Outcome sound playback failed', err);
+    });
+  }
+
+  function configureMusicTracks() {
+    musicTracks.forEach((track, index) => {
+      track.volume = 0.45;
+      track.addEventListener('ended', () => {
+        if (musicEnabled && !state.over && state.screen === 'game') {
+          playNextMusicTrack(index);
+        }
+      });
+    });
+  }
+
+  function stopGameMusic() {
+    musicEnabled = false;
+    musicTracks.forEach((track) => {
+      track.pause();
+      track.currentTime = 0;
+    });
+    currentMusicIndex = -1;
+  }
+
+  function playNextMusicTrack(previousIndex = currentMusicIndex) {
+    if (!musicEnabled || state.over || state.screen !== 'game' || musicTracks.length === 0) return;
+
+    if (previousIndex >= 0 && musicTracks[previousIndex]) {
+      musicTracks[previousIndex].pause();
+      musicTracks[previousIndex].currentTime = 0;
+    }
+
+    let nextIndex = Math.floor(Math.random() * musicTracks.length);
+    if (musicTracks.length > 1) {
+      while (nextIndex === previousIndex) {
+        nextIndex = Math.floor(Math.random() * musicTracks.length);
+      }
+    }
+
+    currentMusicIndex = nextIndex;
+    const track = musicTracks[currentMusicIndex];
+    track.currentTime = 0;
+    track.play().catch((err) => {
+      console.warn('Background music playback failed', err);
+    });
+  }
+
+  function startGameMusic() {
+    stopGameMusic();
+    musicEnabled = true;
+    playNextMusicTrack();
   }
 
   function startTimer() {
@@ -699,11 +866,13 @@
     clearHint();
     stopGameplayMarkup();
     stopTimer();
+    stopGameMusic();
 
     if (won) {
       saveRecordIfNeeded();
       sendWinResult();
       setFace('😎');
+      playOutcomeSound('victory');
       for (const c of state.grid) {
         if (c.mine && !c.flagged) {
           c.flagged = true;
@@ -713,6 +882,7 @@
       showVictoryModal();
     } else {
       setFace('😵');
+      playOutcomeSound('defeat');
       if (opts?.boomAt) startBoom(opts.boomAt.x, opts.boomAt.y);
       setTimeout(() => {
         if (!state.over || state.won) return;
@@ -746,6 +916,7 @@
     state.won = false;
     state.timeSec = 0;
     stopTimer();
+    stopOutcomeSounds();
     if (state.animRaf != null) cancelAnimationFrame(state.animRaf);
     state.animRaf = null;
     state.boom = null;
@@ -758,6 +929,7 @@
     hideLossModal();
     resize();
     draw();
+    startGameMusic();
     showNewGameAd();
   }
 
@@ -1154,6 +1326,7 @@
   });
 
   updateCustomVisibility();
+  configureMusicTracks();
   initYandexSdk();
   showMenu();
 })();
