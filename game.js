@@ -11,8 +11,10 @@
   const customW = document.getElementById('customW');
   const customH = document.getElementById('customH');
   const customM = document.getElementById('customM');
+  const themeSelect = document.getElementById('themeSelect');
   const playBtn = document.getElementById('playBtn');
   const menuBtn = document.getElementById('menuBtn');
+  const themeCycleBtn = document.getElementById('themeCycleBtn');
   const recordsBtn = document.getElementById('recordsBtn');
   const recordsModal = document.getElementById('recordsModal');
   const recordsClose = document.getElementById('recordsClose');
@@ -47,11 +49,7 @@
     defeat: new Audio('./assets/sounds/defeat.mpeg'),
     victory: new Audio('./assets/sounds/game-won.mp3'),
   };
-  const musicTracks = [
-    new Audio('./assets/sounds/1.mp3'),
-    new Audio('./assets/sounds/2.mp3'),
-    new Audio('./assets/sounds/3.mp3'),
-  ];
+  let musicTracks = [];
   let currentMusicIndex = -1;
   let musicEnabled = false;
 
@@ -82,6 +80,79 @@
     '#12151f',
     '#7b8198',
   ];
+
+  const THEMES = {
+    nordic: {
+      label: 'Nordic',
+      font: '"Trebuchet MS", "Gill Sans", Candara, ui-sans-serif, system-ui, sans-serif',
+      musicFiles: ['./assets/sounds/1.mp3', './assets/sounds/2.mp3', './assets/sounds/3.mp3'],
+      colors: {
+        boardBg: '#061016',
+        glowA: 'rgba(144,224,239,.18)',
+        shell: 'rgba(202,247,255,.08)',
+        shellStroke: 'rgba(202,247,255,.20)',
+        hidden: '#c9e5eb',
+        hiddenHi: '#f4fdff',
+        hiddenLo: '#78a7b2',
+        open: '#a9cbd3',
+        openStroke: '#6f99a4',
+        ink: '#10232a',
+        flag: '#66d9e8',
+        flag2: '#ffffff',
+        mine: '#254b56',
+        mineHi: 'rgba(255,255,255,.42)',
+        explode: 'rgba(144,224,239,.28)',
+      },
+    },
+    space: {
+      label: 'Space',
+      font: '"Segoe UI", "Arial", ui-sans-serif, system-ui, sans-serif',
+      // Add these files later to give the theme its own playlist.
+      musicFiles: ['./assets/sounds/space-1.mp3', './assets/sounds/space-2.mp3', './assets/sounds/space-3.mp3'],
+      colors: {
+        boardBg: '#050713',
+        glowA: 'rgba(121,242,255,.16)',
+        shell: 'rgba(190,172,255,.07)',
+        shellStroke: 'rgba(121,242,255,.22)',
+        hidden: '#27284d',
+        hiddenHi: '#46488a',
+        hiddenLo: '#11142d',
+        open: '#1a1c38',
+        openStroke: '#3c3f73',
+        ink: '#f3f1ff',
+        flag: '#79f2ff',
+        flag2: '#ff5caa',
+        mine: '#806cff',
+        mineHi: 'rgba(255,255,255,.38)',
+        explode: 'rgba(255,92,170,.30)',
+      },
+    },
+    medieval: {
+      label: 'Medieval',
+      font: 'Georgia, "Times New Roman", ui-serif, serif',
+      // Add these files later to give the theme its own playlist.
+      musicFiles: ['./assets/sounds/medieval-1.mp3', './assets/sounds/medieval-2.mp3', './assets/sounds/medieval-3.mp3'],
+      colors: {
+        boardBg: '#120d08',
+        glowA: 'rgba(212,175,55,.16)',
+        shell: 'rgba(255,220,150,.06)',
+        shellStroke: 'rgba(212,175,55,.20)',
+        hidden: '#8f7147',
+        hiddenHi: '#d2b070',
+        hiddenLo: '#4d3822',
+        open: '#c8ad79',
+        openStroke: '#7b5c34',
+        ink: '#24170b',
+        flag: '#c73e3a',
+        flag2: '#d4af37',
+        mine: '#2b2117',
+        mineHi: 'rgba(255,230,176,.30)',
+        explode: 'rgba(199,62,58,.32)',
+      },
+    },
+  };
+  const THEME_KEYS = Object.keys(THEMES);
+  let currentThemeKey = readStoredThemeKey();
 
   function initYandexSdk() {
     if (yandex.initPromise) return yandex.initPromise;
@@ -344,6 +415,52 @@
 
   function clamp(n, a, b) {
     return Math.max(a, Math.min(b, n));
+  }
+
+  function readStoredThemeKey() {
+    try {
+      const stored = localStorage.getItem('miner-theme');
+      if (stored && THEMES[stored]) return stored;
+    } catch {}
+    return 'nordic';
+  }
+
+  function activeTheme() {
+    return THEMES[currentThemeKey] || THEMES.nordic;
+  }
+
+  function saveThemeKey(themeKey) {
+    try {
+      localStorage.setItem('miner-theme', themeKey);
+    } catch {}
+  }
+
+  function syncThemeControls() {
+    const theme = activeTheme();
+    if (themeSelect) themeSelect.value = currentThemeKey;
+    if (themeCycleBtn) themeCycleBtn.textContent = theme.label;
+  }
+
+  function applyTheme(themeKey, restartMusic = false) {
+    if (!THEMES[themeKey]) themeKey = 'nordic';
+    const changed = currentThemeKey !== themeKey;
+    currentThemeKey = themeKey;
+    document.body.dataset.theme = currentThemeKey;
+    document.body.style.setProperty('--app-font', activeTheme().font);
+    saveThemeKey(currentThemeKey);
+    syncThemeControls();
+    configureMusicTracks();
+
+    if (restartMusic && changed && musicEnabled && state.screen === 'game' && !state.over) {
+      startGameMusic();
+    }
+    if (state.screen === 'game') draw();
+  }
+
+  function cycleTheme() {
+    const currentIndex = Math.max(0, THEME_KEYS.indexOf(currentThemeKey));
+    const nextTheme = THEME_KEYS[(currentIndex + 1) % THEME_KEYS.length];
+    applyTheme(nextTheme, true);
   }
 
   function idx(x, y) {
@@ -673,6 +790,18 @@
   }
 
   function configureMusicTracks() {
+    const wasEnabled = musicEnabled;
+    if (musicTracks.length) {
+      musicTracks.forEach((track) => {
+        track.pause();
+        track.currentTime = 0;
+      });
+    }
+
+    musicTracks = activeTheme().musicFiles.map((src) => new Audio(src));
+    currentMusicIndex = -1;
+    musicEnabled = wasEnabled;
+
     musicTracks.forEach((track, index) => {
       track.volume = 0.45;
       track.addEventListener('ended', () => {
@@ -989,14 +1118,16 @@
   function draw() {
     if (state.screen !== 'game') return;
 
+    const theme = activeTheme();
+    const colors = theme.colors;
     const w = state.boardPx.w;
     const h = state.boardPx.h;
     ctx.save();
-    ctx.fillStyle = '#07080c';
+    ctx.fillStyle = colors.boardBg;
     ctx.fillRect(0, 0, w, h);
 
     const g = ctx.createRadialGradient(w * 0.2, h * 0.1, 50, w * 0.5, h * 0.5, Math.max(w, h) * 0.8);
-    g.addColorStop(0, 'rgba(40,55,120,.18)');
+    g.addColorStop(0, colors.glowA);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
@@ -1007,9 +1138,9 @@
     const bw = cell * state.w;
     const bh = cell * state.h;
 
-    ctx.fillStyle = 'rgba(255,255,255,.04)';
+    ctx.fillStyle = colors.shell;
     roundRectFill(ctx, ox - 10, oy - 10, bw + 20, bh + 20, 12);
-    ctx.strokeStyle = 'rgba(255,255,255,.10)';
+    ctx.strokeStyle = colors.shellStroke;
     ctx.lineWidth = Math.max(1, Math.floor(1 * state.dpr));
     roundRectStroke(ctx, ox - 10, oy - 10, bw + 20, bh + 20, 12);
 
@@ -1033,17 +1164,19 @@
   }
 
   function drawCell(px, py, size, c, hintPreview = false) {
+    const theme = activeTheme();
+    const colors = theme.colors;
     const s = size;
     const inset = Math.max(1, Math.floor(s * 0.06));
     const border = Math.max(1, Math.floor(s * 0.06));
 
     if (!c.revealed && !hintPreview) {
-      ctx.fillStyle = '#c8cedf';
+      ctx.fillStyle = colors.hidden;
       ctx.fillRect(px, py, s, s);
-      ctx.fillStyle = '#f4f6ff';
+      ctx.fillStyle = colors.hiddenHi;
       ctx.fillRect(px, py, s, border);
       ctx.fillRect(px, py, border, s);
-      ctx.fillStyle = '#8f97b3';
+      ctx.fillStyle = colors.hiddenLo;
       ctx.fillRect(px, py + s - border, s, border);
       ctx.fillRect(px + s - border, py, border, s);
 
@@ -1051,9 +1184,9 @@
       return;
     }
 
-    ctx.fillStyle = '#b7bed4';
+    ctx.fillStyle = colors.open;
     ctx.fillRect(px, py, s, s);
-    ctx.strokeStyle = '#8f97b3';
+    ctx.strokeStyle = colors.openStroke;
     ctx.lineWidth = Math.max(1, Math.floor(1 * state.dpr));
     ctx.strokeRect(px + 0.5, py + 0.5, s - 1, s - 1);
 
@@ -1069,7 +1202,7 @@
 
     if (c.n > 0) {
       ctx.fillStyle = NUMBER_COLORS[c.n] || '#12151f';
-      ctx.font = `700 ${Math.floor(s * 0.62)}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      ctx.font = `700 ${Math.floor(s * 0.62)}px ${theme.font}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(String(c.n), px + s / 2, py + s / 2 + inset * 0.2);
@@ -1100,10 +1233,11 @@
   }
 
   function drawFlag(px, py, s) {
+    const colors = activeTheme().colors;
     const poleX = px + s * 0.44;
     const topY = py + s * 0.22;
     const botY = py + s * 0.78;
-    ctx.strokeStyle = '#12151f';
+    ctx.strokeStyle = colors.ink;
     ctx.lineWidth = Math.max(2, Math.floor(s * 0.08));
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -1111,30 +1245,113 @@
     ctx.lineTo(poleX, botY);
     ctx.stroke();
 
-    ctx.fillStyle = '#ff3b4f';
-    ctx.beginPath();
-    ctx.moveTo(poleX, topY);
-    ctx.lineTo(px + s * 0.74, py + s * 0.36);
-    ctx.lineTo(poleX, py + s * 0.5);
-    ctx.closePath();
-    ctx.fill();
+    if (currentThemeKey === 'space') {
+      ctx.fillStyle = colors.flag;
+      ctx.beginPath();
+      ctx.moveTo(poleX, topY);
+      ctx.quadraticCurveTo(px + s * 0.66, py + s * 0.26, px + s * 0.75, py + s * 0.42);
+      ctx.quadraticCurveTo(px + s * 0.58, py + s * 0.47, poleX, py + s * 0.50);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = colors.flag2;
+      ctx.beginPath();
+      ctx.arc(px + s * 0.62, py + s * 0.37, s * 0.06, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (currentThemeKey === 'medieval') {
+      ctx.fillStyle = colors.flag;
+      ctx.beginPath();
+      ctx.moveTo(poleX, topY);
+      ctx.lineTo(px + s * 0.76, py + s * 0.27);
+      ctx.lineTo(px + s * 0.64, py + s * 0.42);
+      ctx.lineTo(px + s * 0.76, py + s * 0.56);
+      ctx.lineTo(poleX, py + s * 0.50);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = colors.flag2;
+      ctx.lineWidth = Math.max(1, Math.floor(s * 0.045));
+      ctx.beginPath();
+      ctx.moveTo(px + s * 0.52, py + s * 0.28);
+      ctx.lineTo(px + s * 0.52, py + s * 0.50);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = colors.flag;
+      ctx.beginPath();
+      ctx.moveTo(poleX, topY);
+      ctx.lineTo(px + s * 0.74, py + s * 0.30);
+      ctx.lineTo(px + s * 0.58, py + s * 0.40);
+      ctx.lineTo(px + s * 0.74, py + s * 0.50);
+      ctx.lineTo(poleX, py + s * 0.50);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = colors.flag2;
+      ctx.fillRect(poleX + s * 0.03, py + s * 0.33, s * 0.24, Math.max(1, s * 0.04));
+    }
 
-    ctx.fillStyle = '#12151f';
+    ctx.fillStyle = colors.ink;
     ctx.beginPath();
     ctx.arc(poleX, botY + s * 0.03, s * 0.12, 0, Math.PI * 2);
     ctx.fill();
   }
 
   function drawMine(px, py, s, exploded) {
+    const colors = activeTheme().colors;
     if (exploded) {
-      ctx.fillStyle = 'rgba(255, 60, 80, .35)';
+      ctx.fillStyle = colors.explode;
       ctx.fillRect(px, py, s, s);
     }
     const cx = px + s / 2;
     const cy = py + s / 2;
     const r = s * 0.24;
 
-    ctx.strokeStyle = '#12151f';
+    if (currentThemeKey === 'space') {
+      ctx.fillStyle = colors.mine;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 1.2, cy - r * 0.45);
+      ctx.quadraticCurveTo(cx - r * 0.4, cy - r * 1.35, cx + r * 0.82, cy - r * 1.05);
+      ctx.quadraticCurveTo(cx + r * 1.55, cy - r * 0.2, cx + r * 1.05, cy + r * 0.85);
+      ctx.quadraticCurveTo(cx - r * 0.1, cy + r * 1.45, cx - r * 1.2, cy + r * 0.52);
+      ctx.quadraticCurveTo(cx - r * 1.55, cy + r * 0.05, cx - r * 1.2, cy - r * 0.45);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,.22)';
+      ctx.beginPath();
+      ctx.arc(cx + r * 0.35, cy, r * 0.32, 0, Math.PI * 2);
+      ctx.arc(cx - r * 0.38, cy + r * 0.35, r * 0.20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = colors.mineHi;
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.45, cy - r * 0.48, r * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    if (currentThemeKey === 'medieval') {
+      ctx.strokeStyle = colors.mine;
+      ctx.lineWidth = Math.max(2, Math.floor(s * 0.07));
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 1.55, cy + r * 1.35);
+      ctx.lineTo(cx - r * 0.35, cy + r * 0.25);
+      ctx.stroke();
+      ctx.fillStyle = colors.mine;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * (r * 0.78), cy + Math.sin(a) * (r * 0.78));
+        ctx.lineTo(cx + Math.cos(a + 0.18) * (r * 1.42), cy + Math.sin(a + 0.18) * (r * 1.42));
+        ctx.lineTo(cx + Math.cos(a - 0.18) * (r * 1.42), cy + Math.sin(a - 0.18) * (r * 1.42));
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = colors.mineHi;
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.28, cy - r * 0.28, r * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    ctx.strokeStyle = colors.mine;
     ctx.lineWidth = Math.max(1, Math.floor(s * 0.06));
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
@@ -1144,11 +1361,28 @@
       ctx.stroke();
     }
 
-    ctx.fillStyle = '#12151f';
+    ctx.strokeStyle = colors.flag;
+    ctx.lineWidth = Math.max(1, Math.floor(s * 0.045));
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.moveTo(cx - r * 1.35, cy);
+    ctx.lineTo(cx + r * 1.35, cy);
+    ctx.moveTo(cx, cy - r * 1.35);
+    ctx.lineTo(cx, cy + r * 1.35);
+    ctx.stroke();
+
+    ctx.fillStyle = colors.mine;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + (i / 6) * Math.PI * 2;
+      const rr = i % 2 === 0 ? r * 1.02 : r * 0.72;
+      const x = cx + Math.cos(a) * rr;
+      const y = cy + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.25)';
+    ctx.fillStyle = colors.mineHi;
     ctx.beginPath();
     ctx.arc(cx - r * 0.35, cy - r * 0.35, r * 0.35, 0, Math.PI * 2);
     ctx.fill();
@@ -1258,7 +1492,13 @@
   if (hintBtn) hintBtn.addEventListener('click', startHintMode);
   if (playBtn) playBtn.addEventListener('click', startSelectedGame);
   if (menuBtn) menuBtn.addEventListener('click', showMenu);
+  if (themeCycleBtn) themeCycleBtn.addEventListener('click', cycleTheme);
   if (recordsBtn) recordsBtn.addEventListener('click', showRecordsModal);
+  if (themeSelect) {
+    themeSelect.addEventListener('change', () => {
+      applyTheme(themeSelect.value, true);
+    });
+  }
 
   presetSelect.addEventListener('change', () => {
     if (presetSelect.value !== 'custom') {
@@ -1326,7 +1566,7 @@
   });
 
   updateCustomVisibility();
-  configureMusicTracks();
+  applyTheme(currentThemeKey);
   initYandexSdk();
   showMenu();
 })();

@@ -7,6 +7,51 @@
   --muted:#a9afc7;
   --accent:#6ea8fe;
   --danger:#ff5c78;
+  --app-font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  --menu-card: linear-gradient(180deg, rgba(20,26,44,.88), rgba(10,12,18,.92));
+  --surface-glow: rgba(110,168,254,.22);
+}
+
+body[data-theme="nordic"]{
+  --bg0:#081116;
+  --bg1:#132832;
+  --panel:#0e1a21;
+  --border:#4f7582;
+  --text:#eef9fb;
+  --muted:#a9c7cf;
+  --accent:#90e0ef;
+  --danger:#ff6f91;
+  --app-font: "Trebuchet MS", "Gill Sans", Candara, ui-sans-serif, system-ui, sans-serif;
+  --menu-card: linear-gradient(180deg, rgba(14,39,48,.90), rgba(7,16,21,.94));
+  --surface-glow: rgba(144,224,239,.22);
+}
+
+body[data-theme="space"]{
+  --bg0:#070813;
+  --bg1:#171638;
+  --panel:#111225;
+  --border:#413f7a;
+  --text:#f3f1ff;
+  --muted:#b5b1d8;
+  --accent:#79f2ff;
+  --danger:#ff5caa;
+  --app-font: "Segoe UI", "Arial", ui-sans-serif, system-ui, sans-serif;
+  --menu-card: linear-gradient(180deg, rgba(24,24,62,.90), rgba(8,9,22,.94));
+  --surface-glow: rgba(121,242,255,.20);
+}
+
+body[data-theme="medieval"]{
+  --bg0:#161008;
+  --bg1:#2e2114;
+  --panel:#1d160e;
+  --border:#7f6745;
+  --text:#fff2d5;
+  --muted:#d0bb93;
+  --accent:#d4af37;
+  --danger:#c73e3a;
+  --app-font: Georgia, "Times New Roman", ui-serif, serif;
+  --menu-card: linear-gradient(180deg, rgba(57,38,20,.90), rgba(20,14,8,.95));
+  --surface-glow: rgba(212,175,55,.20);
 }
 
 *{box-sizing:border-box}
@@ -16,10 +61,30 @@ html,body{height:100%}
 }
 body{
   margin:0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  font-family:var(--app-font);
   background: radial-gradient(1200px 800px at 20% 0%, #172042 0%, var(--bg0) 45%, #090a0f 100%);
   color:var(--text);
   overflow:hidden;
+}
+
+body[data-theme="nordic"]{
+  background:
+    radial-gradient(900px 600px at 18% 6%, rgba(144,224,239,.24), transparent 48%),
+    linear-gradient(135deg, #061016 0%, var(--bg1) 44%, #081116 100%);
+}
+
+body[data-theme="space"]{
+  background:
+    radial-gradient(2px 2px at 18% 24%, rgba(255,255,255,.88), transparent 60%),
+    radial-gradient(1px 1px at 72% 18%, rgba(255,255,255,.72), transparent 60%),
+    radial-gradient(900px 700px at 65% 4%, rgba(121,242,255,.18), transparent 54%),
+    linear-gradient(140deg, #060712 0%, #121238 52%, #080913 100%);
+}
+
+body[data-theme="medieval"]{
+  background:
+    radial-gradient(900px 620px at 16% 0%, rgba(212,175,55,.18), transparent 46%),
+    linear-gradient(135deg, #130d07 0%, var(--bg1) 52%, #100b06 100%);
 }
 
 .app{
@@ -61,7 +126,7 @@ body{
   padding:28px 24px;
   border-radius:20px;
   border:1px solid rgba(255,255,255,.12);
-  background:linear-gradient(180deg, rgba(20,26,44,.88), rgba(10,12,18,.92));
+  background:var(--menu-card);
   box-shadow:0 24px 70px rgba(0,0,0,.38);
   display:grid;
   gap:14px;
@@ -188,6 +253,15 @@ body{
   font-size:15px;
   font-weight:800;
   letter-spacing:.02em;
+}
+
+.themeBtn{
+  min-height:46px;
+  min-width:104px;
+  padding:10px 14px;
+  border-color:var(--accent);
+  background:linear-gradient(180deg, var(--surface-glow), rgba(255,255,255,.04));
+  font-weight:800;
 }
 
 .hintControl{

@@ -13,7 +13,7 @@
     <div id="app" class="app" role="application" aria-label="Минер">
       <section id="menuScreen" class="menuScreen">
         <div class="menuCard">
-          <h1 class="menuTitle">Минер</h1>
+          <h1 class="menuTitle">Минёр</h1>
 
           <label class="menuField">
             <span class="menuLabel">Сложность</span>
@@ -22,6 +22,15 @@
               <option value="intermediate">Средний (16x16, 40)</option>
               <option value="expert">Эксперт (30x16, 99)</option>
               <option value="custom">Свое поле</option>
+            </select>
+          </label>
+
+          <label class="menuField">
+            <span class="menuLabel">Тема</span>
+            <select id="themeSelect" class="menuSelect" aria-label="Theme">
+              <option value="nordic">Нордическая</option>
+              <option value="space">Космос</option>
+              <option value="medieval">Средневековье</option>
             </select>
           </label>
 
@@ -69,6 +78,7 @@
           </div>
 
           <div class="controls">
+            <button id="themeCycleBtn" class="btn themeBtn" type="button" aria-label="Change theme" title="Change theme">Nordic</button>
             <button id="menuBtn" class="btn" type="button">Меню</button>
           </div>
         </header>
