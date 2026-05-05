@@ -1378,6 +1378,7 @@
     const rect = getCanvasRect();
     const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
     const mobileLandscape = isMobileDevice() && window.innerWidth > window.innerHeight;
+    const denseMobileBoard = mobileLandscape && (state.w >= 16 || state.h >= 16 || state.mines >= 40);
     state.dpr = dpr;
 
     const cssW = Math.max(1, Math.floor(rect.width));
@@ -1387,11 +1388,13 @@
     state.boardPx.w = canvas.width;
     state.boardPx.h = canvas.height;
 
-    const pad = Math.floor((mobileLandscape ? 10 : 18) * dpr);
+    const pad = Math.floor((denseMobileBoard ? 4 : mobileLandscape ? 8 : 18) * dpr);
     const availW = Math.max(1, state.boardPx.w - pad * 2);
     const availH = Math.max(1, state.boardPx.h - pad * 2);
-    const cell = Math.floor(Math.min(availW / state.w, availH / state.h));
-    state.cell = clamp(cell, Math.floor((mobileLandscape ? 18 : 14) * dpr), Math.floor((mobileLandscape ? 56 : 44) * dpr));
+    const fittedCell = Math.floor(Math.min(availW / state.w, availH / state.h));
+    const minCell = Math.floor((mobileLandscape && !denseMobileBoard ? 18 : 14) * dpr);
+    const maxCell = Math.floor((denseMobileBoard ? 60 : mobileLandscape ? 56 : 44) * dpr);
+    state.cell = fittedCell < minCell ? fittedCell : clamp(fittedCell, minCell, maxCell);
 
     const gridW = state.cell * state.w;
     const gridH = state.cell * state.h;
@@ -1419,6 +1422,8 @@
 
     const theme = activeTheme();
     const colors = theme.colors;
+    const mobileLandscape = isMobileDevice() && window.innerWidth > window.innerHeight;
+    const denseMobileBoard = mobileLandscape && (state.w >= 16 || state.h >= 16 || state.mines >= 40);
     const w = state.boardPx.w;
     const h = state.boardPx.h;
     ctx.save();
@@ -1436,12 +1441,14 @@
     const oy = state.oy;
     const bw = cell * state.w;
     const bh = cell * state.h;
+    const shellPad = denseMobileBoard ? Math.max(3, Math.floor(cell * 0.08)) : Math.max(6, Math.floor(cell * 0.14));
+    const shellRadius = denseMobileBoard ? Math.max(8, Math.floor(cell * 0.22)) : 12;
 
     ctx.fillStyle = colors.shell;
-    roundRectFill(ctx, ox - 10, oy - 10, bw + 20, bh + 20, 12);
+    roundRectFill(ctx, ox - shellPad, oy - shellPad, bw + shellPad * 2, bh + shellPad * 2, shellRadius);
     ctx.strokeStyle = colors.shellStroke;
     ctx.lineWidth = Math.max(1, Math.floor(1 * state.dpr));
-    roundRectStroke(ctx, ox - 10, oy - 10, bw + 20, bh + 20, 12);
+    roundRectStroke(ctx, ox - shellPad, oy - shellPad, bw + shellPad * 2, bh + shellPad * 2, shellRadius);
 
     for (let y = 0; y < state.h; y++) {
       for (let x = 0; x < state.w; x++) {

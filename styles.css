@@ -349,6 +349,10 @@ body.needsLandscape .rotateNotice{
   font-weight:800;
 }
 
+.hintControl .themeBtn{
+  min-width:92px;
+}
+
 .hintControl{
   grid-column:1;
   grid-row:1;
@@ -356,6 +360,7 @@ body.needsLandscape .rotateNotice{
   display:flex;
   align-items:center;
   gap:10px;
+  flex-wrap:wrap;
   margin-left:16px;
 }
 
@@ -970,6 +975,7 @@ body.isMobileLandscape .hintControl{
   gap:4px;
   margin-left:0;
   padding-left:2px;
+  flex-wrap:nowrap;
 }
 
 body.isMobileLandscape .hintText,
@@ -1030,8 +1036,8 @@ body.isMobileLandscape #menuBtn{
 }
 
 body.isMobileLandscape .themeBtn{
-  min-width:72px;
-  padding:5px 8px;
+  min-width:64px;
+  padding:5px 7px;
 }
 
 body.isMobileLandscape #menuBtn{
