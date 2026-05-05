@@ -123,6 +123,47 @@ body[data-theme="medieval"]{
   flex-direction:column;
   gap:10px;
   min-height:0;
+  position:relative;
+}
+
+.rotateNotice{
+  display:none;
+}
+
+body.needsLandscape .rotateNotice{
+  position:absolute;
+  inset:0;
+  z-index:15;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:12px;
+  background:
+    radial-gradient(520px 240px at 50% 20%, rgba(121,242,255,.12), transparent 60%),
+    rgba(7,8,12,.88);
+  backdrop-filter:blur(10px);
+}
+
+.rotateNoticeCard{
+  width:min(280px, 100%);
+  padding:16px 14px;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,.14);
+  background:linear-gradient(180deg, rgba(19,24,36,.94), rgba(10,12,18,.9));
+  text-align:center;
+  box-shadow:0 18px 36px rgba(0,0,0,.34);
+}
+
+.rotateNoticeTitle{
+  font-size:18px;
+  font-weight:800;
+  margin-bottom:6px;
+}
+
+.rotateNoticeText{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.35;
 }
 
 .menuCard{
@@ -226,11 +267,16 @@ body[data-theme="medieval"]{
 .face{
   width:54px;
   height:54px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
   border-radius:12px;
   border:1px solid var(--border);
   background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
   color:var(--text);
   font-size:26px;
+  line-height:1;
   cursor:pointer;
   user-select:none;
 }
@@ -449,7 +495,7 @@ kbd{
   display:none !important;
 }
 .modal{
-  position:absolute;
+  position:fixed;
   inset:0;
   display:flex;
   align-items:center;
@@ -457,16 +503,17 @@ kbd{
   padding:16px;
   background:rgba(0,0,0,.55);
   backdrop-filter:blur(8px);
-  z-index:10;
+  z-index:30;
   pointer-events:auto;
 }
 .modalCard{
   width:min(560px, 100%);
+  max-height:min(86vh, 760px);
   border-radius:16px;
   border:1px solid rgba(255,255,255,.14);
   background:rgba(10,12,18,.92);
   box-shadow:0 20px 60px rgba(0,0,0,.55);
-  overflow:hidden;
+  overflow:auto;
   pointer-events:auto;
   animation:popIn .14s ease-out;
   transform-origin:50% 60%;
@@ -531,6 +578,7 @@ kbd{
   box-shadow:0 12px 34px rgba(0,0,0,.38);
   font-size:58px;
   line-height:1;
+  text-align:center;
   backdrop-filter:blur(5px);
 }
 #victoryModal .modalArt::after{
@@ -623,4 +671,449 @@ kbd{
   }
   .counter{width:84px}
   .hint{display:none}
+}
+
+@media (pointer: coarse) and (max-width: 900px){
+  .app{
+    padding:max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    gap:6px;
+  }
+
+  .menuScreen{
+    place-items:start center;
+    padding:max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    overflow:auto;
+  }
+
+  .menuCard{
+    width:min(100%, 560px);
+    max-height:calc(100svh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow:auto;
+    padding:20px 16px;
+    gap:12px;
+    margin:auto 0;
+  }
+
+  .menuTitle{
+    font-size:32px;
+    margin-bottom:2px;
+  }
+
+  .menuField{
+    gap:6px;
+  }
+
+  .menuLabel{
+    font-size:13px;
+  }
+
+  .menuSelect,
+  .menuBtn,
+  .menuPlayBtn{
+    min-height:42px;
+    font-size:14px;
+  }
+
+  .menuCustom{
+    padding:10px;
+    gap:8px;
+  }
+
+  .menuInputField input{
+    width:92px;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 900px) and (orientation: landscape){
+  .gameScreen{
+    gap:5px;
+  }
+
+  .topbar{
+    grid-template-columns:auto minmax(0,1fr) auto;
+    gap:4px;
+  }
+
+  .hintControl{
+    gap:4px;
+    margin-left:0;
+  }
+
+  .hintText{
+    display:none;
+  }
+
+  .panel{
+    padding:4px 6px;
+    gap:6px;
+    border-radius:9px;
+  }
+
+  .counter{
+    width:58px;
+    padding:5px 6px;
+    font-size:16px;
+  }
+
+  .face,
+  .hintAction{
+    width:36px;
+    height:36px;
+    border-radius:9px;
+  }
+
+  .hintIcon{
+    width:18px;
+    height:18px;
+  }
+
+  .controls{
+    gap:4px;
+    flex-wrap:nowrap;
+    margin-right:0;
+  }
+
+  .audioToggle{
+    width:34px;
+    height:34px;
+    border-radius:9px;
+  }
+
+  .audioToggle svg{
+    width:15px;
+    height:15px;
+  }
+
+  .themeBtn,
+  #menuBtn{
+    min-height:34px;
+    font-size:12px;
+  }
+
+  .themeBtn{
+    min-width:78px;
+    padding:6px 9px;
+  }
+
+  #menuBtn{
+    padding:6px 10px;
+  }
+
+  .stage{
+    border-radius:12px;
+  }
+
+  .menuCard{
+    width:min(100%, 720px);
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    align-items:start;
+    gap:8px 10px;
+    padding:14px 12px;
+  }
+
+  .menuTitle,
+  .menuCustom,
+  .menuPlayBtn{
+    grid-column:1 / -1;
+  }
+
+  .menuBtn,
+  .menuField{
+    min-width:0;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 900px) and (max-height: 500px){
+  .menuScreen{
+    padding:max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+
+  .menuCard{
+    max-height:calc(100svh - 12px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding:12px 10px;
+    gap:8px;
+    border-radius:16px;
+  }
+
+  .menuTitle{
+    font-size:26px;
+    margin-bottom:0;
+  }
+
+  .menuLabel{
+    font-size:12px;
+  }
+
+  .menuSelect,
+  .menuBtn,
+  .menuPlayBtn{
+    min-height:36px;
+    padding-top:8px;
+    padding-bottom:8px;
+    font-size:13px;
+  }
+
+  .menuCustom{
+    padding:8px;
+    gap:6px;
+  }
+
+  .field{
+    font-size:12px;
+  }
+
+  .field input,
+  .menuInputField input{
+    width:76px;
+    padding:5px 7px;
+  }
+
+  .rotateNoticeCard{
+    width:min(240px, 100%);
+    padding:12px 10px;
+  }
+
+  .rotateNoticeTitle{
+    font-size:16px;
+  }
+
+  .rotateNoticeText{
+    font-size:12px;
+  }
+}
+
+body.isMobileDevice .app{
+  padding:max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+  gap:6px;
+}
+
+body.isMobileDevice .menuScreen{
+  place-items:center;
+  padding:max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  overflow:auto;
+}
+
+body.isMobileDevice .menuCard{
+  width:min(100%, 560px);
+  max-height:calc(100svh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow:auto;
+  padding:16px 14px;
+  gap:10px;
+  margin:auto;
+  border-radius:16px;
+}
+
+body.isMobileDevice .menuTitle{
+  font-size:30px;
+  margin-bottom:0;
+}
+
+body.isMobileDevice .menuField{
+  gap:6px;
+}
+
+body.isMobileDevice .menuLabel{
+  font-size:12px;
+}
+
+body.isMobileDevice .menuSelect,
+body.isMobileDevice .menuBtn,
+body.isMobileDevice .menuPlayBtn{
+  min-height:38px;
+  font-size:13px;
+}
+
+body.isMobileDevice .menuCustom{
+  padding:8px;
+  gap:6px;
+}
+
+body.isMobileDevice .field{
+  font-size:12px;
+}
+
+body.isMobileDevice .field input,
+body.isMobileDevice .menuInputField input{
+  width:78px;
+  padding:5px 7px;
+}
+
+body.isMobileDevice.needsLandscape .rotateNotice{
+  padding:10px;
+}
+
+body.isMobileDevice .rotateNoticeCard{
+  width:min(240px, 100%);
+  padding:12px 10px;
+  border-radius:14px;
+}
+
+body.isMobileDevice .rotateNoticeTitle{
+  font-size:16px;
+}
+
+body.isMobileDevice .rotateNoticeText{
+  font-size:12px;
+}
+
+body.isMobileLandscape .gameScreen{
+  gap:4px;
+}
+
+body.isMobileLandscape .topbar{
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:4px;
+  padding:2px 4px 0;
+}
+
+body.isMobileLandscape .hintControl{
+  gap:4px;
+  margin-left:0;
+  padding-left:2px;
+}
+
+body.isMobileLandscape .hintText,
+body.isMobileLandscape .hint{
+  display:none;
+}
+
+body.isMobileLandscape .panel{
+  padding:4px 6px;
+  gap:6px;
+  border-radius:9px;
+}
+
+body.isMobileLandscape .counter{
+  width:56px;
+  padding:5px 6px;
+  font-size:15px;
+}
+
+body.isMobileLandscape .face,
+body.isMobileLandscape .hintAction{
+  width:34px;
+  height:34px;
+  border-radius:9px;
+}
+
+body.isMobileLandscape .face{
+  font-size:22px;
+}
+
+body.isMobileLandscape .hintIcon{
+  width:17px;
+  height:17px;
+}
+
+body.isMobileLandscape .controls{
+  gap:4px;
+  flex-wrap:nowrap;
+  margin-right:0;
+  padding-right:2px;
+}
+
+body.isMobileLandscape .audioToggle{
+  width:32px;
+  height:32px;
+  border-radius:8px;
+}
+
+body.isMobileLandscape .audioToggle svg{
+  width:14px;
+  height:14px;
+}
+
+body.isMobileLandscape .themeBtn,
+body.isMobileLandscape #menuBtn{
+  min-height:32px;
+  font-size:11px;
+}
+
+body.isMobileLandscape .themeBtn{
+  min-width:72px;
+  padding:5px 8px;
+}
+
+body.isMobileLandscape #menuBtn{
+  padding:5px 9px;
+}
+
+body.isMobileLandscape .modal{
+  padding:10px;
+}
+
+body.isMobileLandscape .modalCard{
+  width:min(100%, 500px);
+  max-height:calc(100svh - 20px);
+  border-radius:14px;
+}
+
+body.isMobileLandscape .modalTop{
+  padding:8px 10px;
+}
+
+body.isMobileLandscape .modalTitle{
+  font-size:16px;
+}
+
+body.isMobileLandscape #victoryModal .modalArt,
+body.isMobileLandscape #lossModal .modalArt{
+  height:132px;
+  margin:8px 10px 2px 10px;
+  border-radius:10px;
+}
+
+body.isMobileLandscape #victoryModal .modalArt::after,
+body.isMobileLandscape #lossModal .modalArt::after{
+  right:8px;
+  bottom:8px;
+  width:54px;
+  height:54px;
+  border-radius:10px;
+  font-size:34px;
+}
+
+body.isMobileLandscape .modalText{
+  padding:6px 10px 0 10px;
+  gap:8px;
+}
+
+body.isMobileLandscape .modalStat{
+  padding:6px 8px;
+  font-size:12px;
+}
+
+body.isMobileLandscape .modalActions{
+  padding:10px;
+  gap:8px;
+}
+
+body.isMobileLandscape .modalActions .btn{
+  min-height:32px;
+  font-size:12px;
+  padding:6px 9px;
+}
+
+body.isMobileLandscape .menuCard{
+  width:min(100%, 560px);
+  grid-template-columns:1fr;
+  gap:8px;
+  padding:12px 10px;
+}
+
+body.isShortViewport .menuCard{
+  max-height:calc(100svh - 12px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  padding:10px 9px;
+  gap:7px;
+}
+
+body.isShortViewport .menuTitle{
+  font-size:24px;
+}
+
+body.isShortViewport .menuSelect,
+body.isShortViewport .menuBtn,
+body.isShortViewport .menuPlayBtn{
+  min-height:34px;
+  font-size:12px;
 }

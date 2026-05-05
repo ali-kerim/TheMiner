@@ -18,6 +18,7 @@
   const musicToggleBtn = document.getElementById('musicToggleBtn');
   const soundToggleBtn = document.getElementById('soundToggleBtn');
   const recordsBtn = document.getElementById('recordsBtn');
+  const rotateNotice = document.getElementById('rotateNotice');
   const recordsModal = document.getElementById('recordsModal');
   const recordsClose = document.getElementById('recordsClose');
   const recordsOk = document.getElementById('recordsOk');
@@ -186,6 +187,39 @@
       });
 
     return yandex.initPromise;
+  }
+
+  function isMobileDevice() {
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    const narrowViewport = Math.max(window.innerWidth, window.innerHeight) <= 1000;
+    const shortLandscapeViewport = window.innerWidth <= 950 && window.innerHeight <= 540;
+    const hasTouch = navigator.maxTouchPoints > 0;
+    return (coarse || hasTouch || shortLandscapeViewport) && (narrowViewport || shortLandscapeViewport);
+  }
+
+  function needsLandscapeMode() {
+    return isMobileDevice() && window.innerHeight > window.innerWidth;
+  }
+
+  function syncMobileViewportState() {
+    const mobile = isMobileDevice();
+    const needsLandscape = needsLandscapeMode();
+    const mobileLandscape = mobile && window.innerWidth > window.innerHeight;
+    const shortViewport = mobile && window.innerHeight <= 500;
+    document.body.classList.toggle('isMobileDevice', mobile);
+    document.body.classList.toggle('needsLandscape', needsLandscape);
+    document.body.classList.toggle('isMobileLandscape', mobileLandscape);
+    document.body.classList.toggle('isShortViewport', shortViewport);
+    if (rotateNotice) rotateNotice.setAttribute('aria-hidden', needsLandscape ? 'false' : 'true');
+  }
+
+  async function tryLockLandscape() {
+    if (!isMobileDevice()) return;
+    try {
+      if (screen.orientation && typeof screen.orientation.lock === 'function') {
+        await screen.orientation.lock('landscape');
+      }
+    } catch {}
   }
 
   function loadImage(src) {
@@ -747,6 +781,7 @@
 
   function showMenu() {
     state.screen = 'menu';
+    syncMobileViewportState();
     stopGameplayMarkup();
     stopTimer();
     stopGameMusic();
@@ -760,6 +795,8 @@
 
   function showGame() {
     state.screen = 'game';
+    syncMobileViewportState();
+    tryLockLandscape();
     initYandexSdk();
     menuScreen.hidden = true;
     gameScreen.hidden = false;
@@ -1340,6 +1377,7 @@
   function resize() {
     const rect = getCanvasRect();
     const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    const mobileLandscape = isMobileDevice() && window.innerWidth > window.innerHeight;
     state.dpr = dpr;
 
     const cssW = Math.max(1, Math.floor(rect.width));
@@ -1349,11 +1387,11 @@
     state.boardPx.w = canvas.width;
     state.boardPx.h = canvas.height;
 
-    const pad = Math.floor(18 * dpr);
+    const pad = Math.floor((mobileLandscape ? 10 : 18) * dpr);
     const availW = Math.max(1, state.boardPx.w - pad * 2);
     const availH = Math.max(1, state.boardPx.h - pad * 2);
     const cell = Math.floor(Math.min(availW / state.w, availH / state.h));
-    state.cell = clamp(cell, Math.floor(14 * dpr), Math.floor(44 * dpr));
+    state.cell = clamp(cell, Math.floor((mobileLandscape ? 18 : 14) * dpr), Math.floor((mobileLandscape ? 56 : 44) * dpr));
 
     const gridW = state.cell * state.w;
     const gridH = state.cell * state.h;
@@ -1897,12 +1935,21 @@
   });
 
   window.addEventListener('resize', () => {
+    syncMobileViewportState();
+    if (state.screen !== 'game') return;
+    resize();
+    draw();
+  });
+
+  window.addEventListener('orientationchange', () => {
+    syncMobileViewportState();
     if (state.screen !== 'game') return;
     resize();
     draw();
   });
 
   updateCustomVisibility();
+  syncMobileViewportState();
   syncSoundVolumes();
   syncAudioButtons();
   applyTheme(currentThemeKey);
