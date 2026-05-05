@@ -459,6 +459,34 @@ body.needsLandscape .rotateNotice{
   touch-action:manipulation;
 }
 
+.milestonePopup[hidden]{
+  display:none !important;
+}
+.milestonePopup{
+  position:absolute;
+  left:0;
+  top:0;
+  width:120px;
+  height:120px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:4;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .48s ease;
+}
+.milestonePopup.isVisible{
+  opacity:1;
+}
+.milestonePopupImage{
+  display:block;
+  width:auto;
+  height:100%;
+  max-width:100%;
+  object-fit:contain;
+}
+
 .hint{
   position:absolute;
   inset:auto 12px 12px 12px;
@@ -981,6 +1009,14 @@ body.isMobileLandscape .hintControl{
 body.isMobileLandscape .hintText,
 body.isMobileLandscape .hint{
   display:none;
+}
+
+body.isMobileLandscape .milestonePopup{
+  left:0;
+}
+
+body.isShortViewport .milestonePopup{
+  left:0;
 }
 
 body.isMobileLandscape .panel{

@@ -31,6 +31,8 @@
   const hintBtn = document.getElementById('hintBtn');
   const hintText = document.getElementById('hintText');
   const panelEl = document.querySelector('.panel');
+  const milestonePopup = document.getElementById('milestonePopup');
+  const milestonePopupImage = document.getElementById('milestonePopupImage');
 
   const victoryModal = document.getElementById('victoryModal');
   const victoryClose = document.getElementById('victoryClose');
@@ -57,6 +59,24 @@
     medieval: loadImage('./assets/powder.png'),
     space: loadImage('./assets/black-hole.png'),
   };
+  const milestoneImages = {
+    25: loadImage('./assets/troll2_1.png'),
+    50: loadImage('./assets/gj3.png'),
+    75: loadImage('./assets/gj2.png'),
+    90: loadImage('./assets/troll2_2.png'),
+  };
+  const milestoneSounds = {
+    25: new Audio('./assets/sounds/hmm.mpeg'),
+    50: new Audio('./assets/sounds/letsgo.mpeg'),
+    75: new Audio('./assets/sounds/perfect.mpeg'),
+    90: new Audio('./assets/sounds/sneaky.mpeg'),
+  };
+  const MILESTONE_SEQUENCE = [
+    { threshold: 0.25, key: 25 },
+    { threshold: 0.50, key: 50 },
+    { threshold: 0.75, key: 75 },
+    { threshold: 0.90, key: 90 },
+  ];
   let musicTracks = [];
   let currentMusicIndex = -1;
   let musicPlaybackActive = false;
@@ -502,6 +522,10 @@
     hintPreview: /** @type {{x:number,y:number}|null} */ (null),
     hintPreviewId: /** @type {number | null} */ (null),
     minesPlaced: false,
+    milestoneSeen: /** @type {number[]} */ ([]),
+    milestoneQueue: /** @type {number[]} */ ([]),
+    milestoneActive: false,
+    milestoneTimeoutId: /** @type {number | null} */ (null),
     lossContinueUsed: false,
     lossContinuePending: false,
 
@@ -782,6 +806,7 @@
   function showMenu() {
     state.screen = 'menu';
     syncMobileViewportState();
+    hideMilestonePopup();
     stopGameplayMarkup();
     stopTimer();
     stopGameMusic();
@@ -1062,11 +1087,99 @@
       sound.pause();
       sound.currentTime = 0;
     });
+    Object.values(milestoneSounds).forEach((sound) => {
+      sound.pause();
+      sound.currentTime = 0;
+    });
   }
 
   function syncSoundVolumes() {
     outcomeSounds.defeat.volume = soundEnabled ? SOUND_VOLUMES.defeat : 0;
     outcomeSounds.victory.volume = soundEnabled ? SOUND_VOLUMES.victory : 0;
+    Object.values(milestoneSounds).forEach((sound) => {
+      sound.volume = soundEnabled ? 1 : 0;
+    });
+  }
+
+  function hideMilestonePopup() {
+    if (state.milestoneTimeoutId != null) {
+      clearTimeout(state.milestoneTimeoutId);
+      state.milestoneTimeoutId = null;
+    }
+    state.milestoneActive = false;
+    if (milestonePopup) {
+      milestonePopup.classList.remove('isVisible');
+      milestonePopup.hidden = true;
+      milestonePopup.style.visibility = 'hidden';
+    }
+    processMilestoneQueue();
+  }
+
+  function playMilestoneVoice(milestoneKey) {
+    if (!soundEnabled) return;
+    const sound = milestoneSounds[milestoneKey];
+    if (!sound) return;
+    Object.values(milestoneSounds).forEach((entry) => {
+      entry.pause();
+      entry.currentTime = 0;
+    });
+    sound.play().catch((err) => {
+      console.warn('Milestone voice playback failed', err);
+    });
+  }
+
+  function processMilestoneQueue() {
+    if (state.milestoneActive || !state.milestoneQueue.length || state.screen !== 'game' || state.over) return;
+    const milestoneKey = state.milestoneQueue.shift();
+    const milestoneImage = milestoneImages[milestoneKey];
+    if (!milestonePopup || !milestonePopupImage || !milestoneImage) return;
+
+    syncMilestonePopupLayout();
+    milestonePopupImage.src = milestoneImage.src;
+    milestonePopupImage.alt = `${milestoneKey}%`;
+    milestonePopup.hidden = false;
+    milestonePopup.style.visibility = 'visible';
+    milestonePopup.classList.remove('isVisible');
+    state.milestoneActive = true;
+    playMilestoneVoice(milestoneKey);
+    requestAnimationFrame(() => {
+      if (milestonePopup && state.milestoneActive) milestonePopup.classList.add('isVisible');
+    });
+    state.milestoneTimeoutId = window.setTimeout(() => {
+      if (milestonePopup) milestonePopup.classList.remove('isVisible');
+      state.milestoneTimeoutId = window.setTimeout(() => {
+        state.milestoneTimeoutId = null;
+        state.milestoneActive = false;
+        if (milestonePopup) {
+          milestonePopup.hidden = true;
+          milestonePopup.style.visibility = 'hidden';
+        }
+        processMilestoneQueue();
+      }, 280);
+    }, 1720);
+  }
+
+  function countCorrectFlags() {
+    let correctFlags = 0;
+    for (const cell of state.grid) {
+      if (cell.mine && cell.flagged) correctFlags++;
+    }
+    return correctFlags;
+  }
+
+  function updateProgressMilestones() {
+    if (state.over) return;
+    if (state.mines <= 0 || !state.minesPlaced) return;
+    const progress = countCorrectFlags() / state.mines;
+
+    MILESTONE_SEQUENCE.forEach(({ threshold, key }) => {
+      if (progress < threshold) return;
+      if (state.milestoneSeen.includes(key)) return;
+      state.milestoneSeen.push(key);
+      state.milestoneQueue.push(key);
+    });
+
+    processMilestoneQueue();
   }
 
   function playOutcomeSound(type) {
@@ -1288,6 +1401,7 @@
   function gameOver(won, opts) {
     state.over = true;
     state.won = won;
+    hideMilestonePopup();
     clearHint();
     stopGameplayMarkup();
     stopTimer();
@@ -1326,6 +1440,7 @@
   function checkWin() {
     if (state.over) return;
     const safeCells = state.w * state.h - state.mines;
+    updateProgressMilestones();
     if (state.revealed >= safeCells) gameOver(true);
   }
 
@@ -1346,6 +1461,14 @@
     state.animRaf = null;
     state.boom = null;
     state.minesPlaced = false;
+    state.milestoneSeen = [];
+    state.milestoneQueue = [];
+    state.milestoneActive = false;
+    if (state.milestoneTimeoutId != null) {
+      clearTimeout(state.milestoneTimeoutId);
+      state.milestoneTimeoutId = null;
+    }
+    if (milestonePopup) milestonePopup.hidden = true;
     state.lossContinueUsed = false;
     state.lossContinuePending = false;
     clearHint();
@@ -1405,6 +1528,29 @@
       const gridCssW = Math.round(gridW / dpr);
       panelEl.style.setProperty('--panel-width', `${gridCssW}px`);
     }
+    syncMilestonePopupLayout();
+  }
+
+  function syncMilestonePopupLayout() {
+    if (!milestonePopup) return;
+    const dpr = state.dpr || 1;
+    const gridCssH = Math.max(1, Math.round((state.cell * state.h) / dpr));
+    const gridCssW = Math.max(1, Math.round((state.cell * state.w) / dpr));
+    const leftSpace = Math.max(0, Math.round(state.ox / dpr) - 8);
+    const top = Math.max(0, Math.round(state.oy / dpr));
+    const preferredWidth = Math.max(72, Math.round(Math.min(gridCssH * 0.85, gridCssW * 0.28)));
+    const maxWidth = leftSpace > 24 ? leftSpace : preferredWidth;
+    const left = leftSpace > 24 ? 0 : 8;
+
+    milestonePopup.style.top = `${top}px`;
+    milestonePopup.style.left = `${left}px`;
+    milestonePopup.style.height = `${gridCssH}px`;
+    milestonePopup.style.width = `${maxWidth}px`;
+    milestonePopup.style.maxWidth = `${maxWidth}px`;
+    milestonePopup.style.transform = 'none';
+    milestonePopup.style.display = 'flex';
+    milestonePopup.style.alignItems = 'center';
+    milestonePopup.style.justifyContent = 'center';
   }
 
   function toCell(clientX, clientY) {
