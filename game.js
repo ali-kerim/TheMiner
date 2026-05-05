@@ -38,6 +38,7 @@
 
   const lossModal = document.getElementById('lossModal');
   const lossClose = document.getElementById('lossClose');
+  const lossContinue = document.getElementById('lossContinue');
   const lossAgain = document.getElementById('lossAgain');
   const lossOk = document.getElementById('lossOk');
   const lossTime = document.getElementById('lossTime');
@@ -62,6 +63,7 @@
     adShowing: false,
     gameplayActive: false,
   };
+  const LOSS_CONTINUE_LABEL = 'Продолжить за рекламу';
 
   const PRESETS = {
     beginner: { w: 9, h: 9, m: 10, label: 'Новичок' },
@@ -303,6 +305,53 @@
     }));
   }
 
+  function showRewardedContinueAd() {
+    if (yandex.adShowing) return Promise.resolve({ rewarded: false });
+
+    return initYandexSdk().then((ysdk) => new Promise((resolve) => {
+      if (!ysdk?.adv || typeof ysdk.adv.showRewardedVideo !== 'function') {
+        resolve({ rewarded: false, error: true });
+        return;
+      }
+
+      let settled = false;
+      let rewarded = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        yandex.adShowing = false;
+        startGameplayMarkup();
+        resolve(result);
+      };
+
+      stopGameplayMarkup();
+      yandex.adShowing = true;
+
+      try {
+        ysdk.adv.showRewardedVideo({
+          callbacks: {
+            onOpen: () => {
+              stopGameplayMarkup();
+            },
+            onRewarded: () => {
+              rewarded = true;
+            },
+            onClose: () => {
+              finish({ rewarded });
+            },
+            onError: (err) => {
+              console.warn('Yandex rewarded ad failed', err);
+              finish({ rewarded: false, error: true });
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('Yandex rewarded ad failed', err);
+        finish({ rewarded: false, error: true });
+      }
+    }));
+  }
+
   function getPlayerPayload() {
     const player = yandex.player;
     if (!player) return null;
@@ -399,6 +448,8 @@
     hintPreview: /** @type {{x:number,y:number}|null} */ (null),
     hintPreviewId: /** @type {number | null} */ (null),
     minesPlaced: false,
+    lossContinueUsed: false,
+    lossContinuePending: false,
 
     currentPreset: 'beginner',
     currentRecordKey: 'beginner',
@@ -700,11 +751,139 @@
   function showLossModal() {
     lossTime.textContent = fmt3(state.timeSec);
     lossBoard.textContent = boardLabel();
+    syncLossContinueButton();
     lossModal.hidden = false;
   }
 
   function hideLossModal() {
     lossModal.hidden = true;
+  }
+
+  function setLossContinueLabel(label) {
+    if (!lossContinue) return;
+    lossContinue.textContent = label;
+  }
+
+  function syncLossContinueButton() {
+    if (!lossContinue) return;
+    lossContinue.disabled = state.lossContinuePending || state.lossContinueUsed;
+    if (state.lossContinuePending) {
+      setLossContinueLabel('Загрузка...');
+      return;
+    }
+    if (state.lossContinueUsed) {
+      setLossContinueLabel('Продолжение использовано');
+      return;
+    }
+    setLossContinueLabel(LOSS_CONTINUE_LABEL);
+  }
+
+  function scheduleLossContinueLabelReset() {
+    window.setTimeout(() => {
+      if (state.lossContinuePending || state.lossContinueUsed) return;
+      setLossContinueLabel(LOSS_CONTINUE_LABEL);
+    }, 1800);
+  }
+
+  function findReviveTargetIndex(explodedIndex) {
+    const remote = [];
+    const fallback = [];
+
+    for (let y = 0; y < state.h; y++) {
+      for (let x = 0; x < state.w; x++) {
+        const i = idx(x, y);
+        const cell = state.grid[i];
+        if (i === explodedIndex || cell.mine || cell.revealed || cell.flagged) continue;
+
+        let touchesRevealed = false;
+        neighbors(x, y, (nx, ny) => {
+          if (state.grid[idx(nx, ny)].revealed) touchesRevealed = true;
+        });
+
+        (touchesRevealed ? fallback : remote).push(i);
+      }
+    }
+
+    const pool = remote.length ? remote : fallback;
+    if (!pool.length) return -1;
+    return pool[(Math.random() * pool.length) | 0];
+  }
+
+  function reviveAfterLoss() {
+    const explodedIndex = state.grid.findIndex((cell) => cell.exploded);
+    if (explodedIndex < 0) return false;
+
+    const targetIndex = findReviveTargetIndex(explodedIndex);
+    if (targetIndex < 0) return false;
+
+    const explodedX = explodedIndex % state.w;
+    const explodedY = Math.floor(explodedIndex / state.w);
+    const explodedCell = state.grid[explodedIndex];
+    const targetCell = state.grid[targetIndex];
+
+    explodedCell.mine = false;
+    explodedCell.exploded = false;
+    explodedCell.revealed = true;
+    targetCell.mine = true;
+
+    for (const cell of state.grid) {
+      if (cell.mine) {
+        cell.revealed = false;
+        cell.exploded = false;
+      }
+    }
+
+    computeNumbers();
+
+    state.over = false;
+    state.won = false;
+    state.lossContinueUsed = true;
+    state.lossContinuePending = false;
+    stopOutcomeSounds();
+    if (state.animRaf != null) cancelAnimationFrame(state.animRaf);
+    state.animRaf = null;
+    state.boom = null;
+    hideLossModal();
+    setFace('🙂');
+    if (explodedCell.n === 0) floodFillZeros(explodedX, explodedY);
+    updateCounters();
+    draw();
+    startTimer();
+    startGameMusic();
+    startGameplayMarkup();
+    checkWin();
+    return true;
+  }
+
+  async function continueAfterRewardAd() {
+    if (state.lossContinueUsed || state.lossContinuePending || !state.over || state.won) return;
+
+    state.lossContinuePending = true;
+    syncLossContinueButton();
+
+    const adResult = await showRewardedContinueAd();
+    state.lossContinuePending = false;
+
+    if (!state.over || state.won) {
+      syncLossContinueButton();
+      return;
+    }
+
+    if (!adResult.rewarded) {
+      setLossContinueLabel(adResult.error ? 'Реклама недоступна' : 'Нужно досмотреть');
+      if (lossContinue) lossContinue.disabled = false;
+      scheduleLossContinueLabelReset();
+      return;
+    }
+
+    if (!reviveAfterLoss()) {
+      setLossContinueLabel('Не удалось продолжить');
+      if (lossContinue) lossContinue.disabled = false;
+      scheduleLossContinueLabelReset();
+      return;
+    }
+
+    syncLossContinueButton();
   }
 
   function easeOutCubic(t) {
@@ -1050,6 +1229,8 @@
     state.animRaf = null;
     state.boom = null;
     state.minesPlaced = false;
+    state.lossContinueUsed = false;
+    state.lossContinuePending = false;
     clearHint();
     resetGrid();
     updateCounters();
@@ -1536,6 +1717,7 @@
 
   if (lossClose) lossClose.addEventListener('click', hideLossModal);
   if (lossOk) lossOk.addEventListener('click', hideLossModal);
+  if (lossContinue) lossContinue.addEventListener('click', continueAfterRewardAd);
   if (lossAgain) {
     lossAgain.addEventListener('click', () => {
       hideLossModal();
