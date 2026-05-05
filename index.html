@@ -10,6 +10,7 @@
     <script src="https://yandex.ru/games/sdk/v2"></script>
   </head>
   <body>
+    <button id="languageToggleBtn" class="languageToggle" type="button" aria-label="Switch language" title="Switch language">RU</button>
     <div id="app" class="app" role="application" aria-label="Минер">
       <section id="menuScreen" class="menuScreen">
         <div class="menuCard">
@@ -168,10 +169,10 @@
 
               <div class="modalText">
                 <div class="modalStat">
-                  Время: <span id="victoryTime" class="statVal">000</span>
+                  <span id="victoryTimeLabel">Время</span>: <span id="victoryTime" class="statVal">000</span>
                 </div>
                 <div class="modalStat">
-                  Поле: <span id="victoryBoard" class="statVal">9x9 • 10 мин</span>
+                  <span id="victoryBoardLabel">Поле</span>: <span id="victoryBoard" class="statVal">9x9 • 10 мин</span>
                 </div>
               </div>
 
@@ -227,10 +228,10 @@
 
               <div class="modalText">
                 <div class="modalStat">
-                  Время: <span id="lossTime" class="statVal">000</span>
+                  <span id="lossTimeLabel">Время</span>: <span id="lossTime" class="statVal">000</span>
                 </div>
                 <div class="modalStat">
-                  Поле: <span id="lossBoard" class="statVal">9x9 • 10 мин</span>
+                  <span id="lossBoardLabel">Поле</span>: <span id="lossBoard" class="statVal">9x9 • 10 мин</span>
                 </div>
               </div>
 

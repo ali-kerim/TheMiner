@@ -71,6 +71,30 @@ body{
   overflow:hidden;
 }
 
+.languageToggle{
+  position:fixed;
+  top:max(10px, env(safe-area-inset-top));
+  right:max(10px, env(safe-area-inset-right));
+  z-index:40;
+  min-width:48px;
+  min-height:40px;
+  padding:8px 12px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(10,12,18,.72);
+  color:var(--text);
+  font-weight:800;
+  letter-spacing:.04em;
+  backdrop-filter:blur(10px);
+  box-shadow:0 10px 28px rgba(0,0,0,.24);
+  cursor:pointer;
+}
+.languageToggle:active{transform:translateY(1px)}
+
+body.inGame .languageToggle{
+  display:none;
+}
+
 body[data-theme="nordic"]{
   background:
     radial-gradient(900px 600px at 18% 6%, rgba(144,224,239,.24), transparent 48%),
@@ -351,6 +375,7 @@ body.needsLandscape .rotateNotice{
 
 .hintControl .themeBtn{
   min-width:92px;
+  order:3;
 }
 
 .hintControl{
@@ -362,6 +387,10 @@ body.needsLandscape .rotateNotice{
   gap:10px;
   flex-wrap:wrap;
   margin-left:16px;
+}
+
+.hintText{
+  order:2;
 }
 
 .hintAction{
@@ -566,9 +595,6 @@ kbd{
 .modalTitle{
   font-size:18px;
   font-weight:800;
-}
-#lossModal .modalTitle::after{
-  content:" Поражение";
 }
 .iconBtn{
   width:36px;
@@ -1004,6 +1030,10 @@ body.isMobileLandscape .hintControl{
   margin-left:0;
   padding-left:2px;
   flex-wrap:nowrap;
+}
+
+body.isMobileLandscape .hintControl .themeBtn{
+  order:2;
 }
 
 body.isMobileLandscape .hintText,

@@ -15,6 +15,7 @@
   const playBtn = document.getElementById('playBtn');
   const menuBtn = document.getElementById('menuBtn');
   const themeCycleBtn = document.getElementById('themeCycleBtn');
+  const languageToggleBtn = document.getElementById('languageToggleBtn');
   const musicToggleBtn = document.getElementById('musicToggleBtn');
   const soundToggleBtn = document.getElementById('soundToggleBtn');
   const recordsBtn = document.getElementById('recordsBtn');
@@ -186,6 +187,149 @@
   };
   const THEME_KEYS = Object.keys(THEMES);
   let currentThemeKey = readStoredThemeKey();
+  let currentLanguage = readStoredLanguage();
+  const I18N = {
+    ru: {
+      html_lang: 'ru',
+      app_name: 'Минер',
+      app_title: 'Минёр',
+      difficulty: 'Сложность',
+      difficulty_aria: 'Сложность',
+      theme: 'Тема',
+      theme_aria: 'Тема',
+      records: 'Рекорды',
+      custom_field: 'Создай свое поле',
+      width: 'Ширина',
+      height: 'Высота',
+      mines: 'Мины',
+      play: 'Играть',
+      rotate_title: 'Поверните устройство',
+      rotate_text: 'Для удобной игры на телефоне используется горизонтальный режим.',
+      hint: 'Подсказка',
+      hint_button_title: 'Посмотрите рекламу и выберите закрытую клетку для подсказки',
+      hint_after_ad: 'Подсказка после рекламы',
+      mines_remaining: 'Осталось мин',
+      new_game: 'Новая игра',
+      time: 'Время',
+      menu: 'Меню',
+      gameplay_field: 'Игровое поле',
+      board_aria: 'Поле сапера',
+      controls: 'Управление',
+      lmb_open: 'ЛКМ открыть',
+      rmb_flag: 'ПКМ флажок',
+      long_press_flag: 'Долгое нажатие флажок (тач)',
+      click_number_open: 'Клик по цифре открыть вокруг',
+      victory_title: 'Победа!',
+      close: 'Закрыть',
+      field: 'Поле',
+      play_again: 'Играть ещё',
+      ok: 'ОК',
+      loss_title: 'Бум! Поражение',
+      loss_continue: 'Продолжить за рекламу',
+      records_title: 'Рекорды',
+      no_record: 'Пока нет рекорда',
+      sec_short: 'сек',
+      loading: 'Загрузка...',
+      continue_used: 'Продолжение использовано',
+      ad_unavailable: 'Реклама недоступна',
+      need_watch_short: 'Нужно досмотреть',
+      unable_continue: 'Не удалось продолжить',
+      watch_ad_to_end: 'Смотрите рекламу до конца',
+      loading_ad: 'Загружаем рекламу...',
+      need_watch_ad: 'Нужно досмотреть рекламу',
+      choose_closed_cell: 'Выберите закрытую клетку',
+      switch_language: 'Переключить язык',
+      switch_to_en: 'Switch to English',
+      switch_to_ru: 'Переключить на русский',
+      music_off: 'Выключить музыку',
+      music_on: 'Включить музыку',
+      sound_off: 'Выключить звуки',
+      sound_on: 'Включить звуки',
+      preset_beginner: 'Новичок',
+      preset_intermediate: 'Средний',
+      preset_expert: 'Эксперт',
+      preset_custom: 'Свое поле',
+      custom_board: 'Свое поле',
+      theme_nordic: 'Нордик',
+      theme_space: 'Космос',
+      theme_medieval: 'История',
+      theme_option_nordic: 'Нордическая',
+      theme_option_space: 'Космос',
+      theme_option_medieval: 'Средневековье',
+      minute_mines: 'мин',
+      board_separator: '•',
+    },
+    en: {
+      html_lang: 'en',
+      app_name: 'Miner',
+      app_title: 'Miner',
+      difficulty: 'Difficulty',
+      difficulty_aria: 'Difficulty',
+      theme: 'Theme',
+      theme_aria: 'Theme',
+      records: 'Records',
+      custom_field: 'Create custom field',
+      width: 'Width',
+      height: 'Height',
+      mines: 'Mines',
+      play: 'Play',
+      rotate_title: 'Rotate your device',
+      rotate_text: 'Landscape mode is used on phones for more comfortable play.',
+      hint: 'Hint',
+      hint_button_title: 'Watch an ad and choose a closed cell for a hint',
+      hint_after_ad: 'Hint after ad',
+      mines_remaining: 'Mines left',
+      new_game: 'New game',
+      time: 'Time',
+      menu: 'Menu',
+      gameplay_field: 'Game field',
+      board_aria: 'Minesweeper board',
+      controls: 'Controls',
+      lmb_open: 'LMB open',
+      rmb_flag: 'RMB flag',
+      long_press_flag: 'Long press flag (touch)',
+      click_number_open: 'Click number to open around',
+      victory_title: 'Victory!',
+      close: 'Close',
+      field: 'Field',
+      play_again: 'Play again',
+      ok: 'OK',
+      loss_title: 'Boom! Defeat',
+      loss_continue: 'Continue for ad',
+      records_title: 'Records',
+      no_record: 'No record yet',
+      sec_short: 'sec',
+      loading: 'Loading...',
+      continue_used: 'Continue already used',
+      ad_unavailable: 'Ad unavailable',
+      need_watch_short: 'Watch to the end',
+      unable_continue: 'Unable to continue',
+      watch_ad_to_end: 'Watch the ad to the end',
+      loading_ad: 'Loading ad...',
+      need_watch_ad: 'You need to watch the ad',
+      choose_closed_cell: 'Choose a closed cell',
+      switch_language: 'Switch language',
+      switch_to_en: 'Switch to English',
+      switch_to_ru: 'Switch to Russian',
+      music_off: 'Turn music off',
+      music_on: 'Turn music on',
+      sound_off: 'Turn sounds off',
+      sound_on: 'Turn sounds on',
+      preset_beginner: 'Beginner',
+      preset_intermediate: 'Intermediate',
+      preset_expert: 'Expert',
+      preset_custom: 'Custom field',
+      custom_board: 'Custom field',
+      theme_nordic: 'Nordic',
+      theme_space: 'Space',
+      theme_medieval: 'Medieval',
+      theme_option_nordic: 'Nordic',
+      theme_option_space: 'Space',
+      theme_option_medieval: 'Medieval',
+      minute_mines: 'mines',
+      board_separator: '•',
+    },
+  };
 
   function initYandexSdk() {
     if (yandex.initPromise) return yandex.initPromise;
@@ -554,6 +698,14 @@
     return 'nordic';
   }
 
+  function readStoredLanguage() {
+    try {
+      const stored = localStorage.getItem('miner-language');
+      if (stored === 'ru' || stored === 'en') return stored;
+    } catch {}
+    return 'ru';
+  }
+
   function readStoredAudioSetting(key, fallback) {
     try {
       const raw = localStorage.getItem(`miner-audio:${key}`);
@@ -567,9 +719,32 @@
     return THEMES[currentThemeKey] || THEMES.nordic;
   }
 
+  function t(key) {
+    return I18N[currentLanguage]?.[key] ?? I18N.ru[key] ?? key;
+  }
+
+  function getPresetLabel(presetKey) {
+    if (presetKey === 'intermediate') return t('preset_intermediate');
+    if (presetKey === 'expert') return t('preset_expert');
+    if (presetKey === 'custom') return t('preset_custom');
+    return t('preset_beginner');
+  }
+
+  function getThemeLabel(themeKey) {
+    if (themeKey === 'space') return t('theme_space');
+    if (themeKey === 'medieval') return t('theme_medieval');
+    return t('theme_nordic');
+  }
+
   function saveThemeKey(themeKey) {
     try {
       localStorage.setItem('miner-theme', themeKey);
+    } catch {}
+  }
+
+  function saveLanguage(lang) {
+    try {
+      localStorage.setItem('miner-language', lang);
     } catch {}
   }
 
@@ -580,9 +755,128 @@
   }
 
   function syncThemeControls() {
-    const theme = activeTheme();
     if (themeSelect) themeSelect.value = currentThemeKey;
-    if (themeCycleBtn) themeCycleBtn.textContent = theme.label;
+    if (themeCycleBtn) themeCycleBtn.textContent = getThemeLabel(currentThemeKey);
+  }
+
+  function syncLanguageButton() {
+    if (!languageToggleBtn) return;
+    languageToggleBtn.textContent = currentLanguage.toUpperCase();
+    languageToggleBtn.setAttribute('aria-label', t('switch_language'));
+    languageToggleBtn.title = currentLanguage === 'ru' ? t('switch_to_en') : t('switch_to_ru');
+  }
+
+  function applyLanguageToDom() {
+    document.documentElement.lang = t('html_lang');
+    document.title = t('app_name');
+    const app = document.getElementById('app');
+    if (app) app.setAttribute('aria-label', t('app_name'));
+    const menuTitle = document.querySelector('.menuTitle');
+    if (menuTitle) menuTitle.textContent = t('app_title');
+
+    const menuLabels = document.querySelectorAll('.menuField .menuLabel');
+    if (menuLabels[0]) menuLabels[0].textContent = t('difficulty');
+    if (menuLabels[1]) menuLabels[1].textContent = t('theme');
+
+    if (presetSelect) presetSelect.setAttribute('aria-label', t('difficulty_aria'));
+    if (themeSelect) themeSelect.setAttribute('aria-label', t('theme_aria'));
+    if (presetSelect) {
+      presetSelect.options[0].textContent = `${t('preset_beginner')} (9x9, 10)`;
+      presetSelect.options[1].textContent = `${t('preset_intermediate')} (16x16, 40)`;
+      presetSelect.options[2].textContent = `${t('preset_expert')} (30x16, 99)`;
+      presetSelect.options[3].textContent = t('preset_custom');
+    }
+    if (themeSelect) {
+      themeSelect.options[0].textContent = t('theme_option_nordic');
+      themeSelect.options[1].textContent = t('theme_option_space');
+      themeSelect.options[2].textContent = t('theme_option_medieval');
+    }
+
+    if (recordsBtn) recordsBtn.textContent = t('records');
+    if (toggleCustomBtn) toggleCustomBtn.textContent = t('custom_field');
+    if (playBtn) playBtn.textContent = t('play');
+    if (menuBtn) menuBtn.textContent = t('menu');
+    if (hintBtn) {
+      hintBtn.setAttribute('aria-label', t('hint'));
+      hintBtn.title = t('hint_button_title');
+    }
+    if (themeCycleBtn) {
+      themeCycleBtn.setAttribute('aria-label', t('theme'));
+      themeCycleBtn.title = t('theme');
+    }
+    if (minesEl) minesEl.setAttribute('aria-label', t('mines_remaining'));
+    if (timeEl) timeEl.setAttribute('aria-label', t('time'));
+    if (faceBtn) {
+      faceBtn.setAttribute('aria-label', t('new_game'));
+      faceBtn.title = t('new_game');
+    }
+    if (gameScreen) gameScreen.querySelector('.stage')?.setAttribute('aria-label', t('gameplay_field'));
+    if (canvas) canvas.setAttribute('aria-label', t('board_aria'));
+
+    const customLabels = customControls?.querySelectorAll('label span');
+    if (customLabels?.[0]) customLabels[0].textContent = t('width');
+    if (customLabels?.[1]) customLabels[1].textContent = t('height');
+    if (customLabels?.[2]) customLabels[2].textContent = t('mines');
+
+    const rotateTitle = document.querySelector('.rotateNoticeTitle');
+    const rotateText = document.querySelector('.rotateNoticeText');
+    if (rotateTitle) rotateTitle.textContent = t('rotate_title');
+    if (rotateText) rotateText.textContent = t('rotate_text');
+
+    const hintTitle = document.querySelector('.hintTitle');
+    if (hintTitle) hintTitle.textContent = t('controls');
+    const hintRows = document.querySelectorAll('.hintBody div');
+    if (hintRows[0]) hintRows[0].innerHTML = currentLanguage === 'ru' ? '<kbd>ЛКМ</kbd> открыть' : '<kbd>LMB</kbd> open';
+    if (hintRows[1]) hintRows[1].innerHTML = currentLanguage === 'ru' ? '<kbd>ПКМ</kbd> флажок' : '<kbd>RMB</kbd> flag';
+    if (hintRows[2]) hintRows[2].innerHTML = currentLanguage === 'ru' ? '<kbd>Долгое нажатие</kbd> флажок (тач)' : '<kbd>Long press</kbd> flag (touch)';
+    if (hintRows[3]) hintRows[3].innerHTML = currentLanguage === 'ru' ? '<kbd>Клик по цифре</kbd> открыть вокруг' : '<kbd>Number click</kbd> open around';
+
+    if (victoryModal) victoryModal.setAttribute('aria-label', t('victory_title'));
+    if (lossModal) lossModal.setAttribute('aria-label', t('loss_title'));
+    if (recordsModal) recordsModal.setAttribute('aria-label', t('records_title'));
+    const modalTitles = document.querySelectorAll('.modalTitle');
+    if (modalTitles[0]) modalTitles[0].textContent = t('victory_title');
+    if (modalTitles[1]) modalTitles[1].textContent = t('loss_title');
+    if (modalTitles[2]) modalTitles[2].textContent = t('records_title');
+
+    if (victoryClose) victoryClose.setAttribute('aria-label', t('close'));
+    if (lossClose) lossClose.setAttribute('aria-label', t('close'));
+    if (recordsClose) recordsClose.setAttribute('aria-label', t('close'));
+    if (victoryAgain) victoryAgain.textContent = t('play_again');
+    if (victoryOk) victoryOk.textContent = t('ok');
+    if (lossAgain) lossAgain.textContent = t('play_again');
+    if (lossOk) lossOk.textContent = t('ok');
+    if (recordsOk) recordsOk.textContent = t('ok');
+
+    const victoryTimeLabel = document.getElementById('victoryTimeLabel');
+    const victoryBoardLabel = document.getElementById('victoryBoardLabel');
+    const lossTimeLabel = document.getElementById('lossTimeLabel');
+    const lossBoardLabel = document.getElementById('lossBoardLabel');
+    if (victoryTimeLabel) victoryTimeLabel.textContent = t('time');
+    if (victoryBoardLabel) victoryBoardLabel.textContent = t('field');
+    if (lossTimeLabel) lossTimeLabel.textContent = t('time');
+    if (lossBoardLabel) lossBoardLabel.textContent = t('field');
+  }
+
+  function applyLanguage(lang, refreshRecords = true) {
+    currentLanguage = lang === 'en' ? 'en' : 'ru';
+    saveLanguage(currentLanguage);
+    applyLanguageToDom();
+    syncThemeControls();
+    syncAudioButtons();
+    syncLanguageButton();
+    if (!state.hintAdPending && !state.hintMode) setHintText(t('hint_after_ad'));
+    if (refreshRecords && recordsModal && !recordsModal.hidden) showRecordsModal();
+    if (lossModal && !lossModal.hidden) {
+      showLossModal();
+    }
+    if (victoryModal && !victoryModal.hidden) {
+      showVictoryModal();
+    }
+  }
+
+  function toggleLanguage() {
+    applyLanguage(currentLanguage === 'ru' ? 'en' : 'ru');
   }
 
   function syncAudioButtons() {
@@ -805,6 +1099,7 @@
 
   function showMenu() {
     state.screen = 'menu';
+    document.body.classList.remove('inGame');
     syncMobileViewportState();
     hideMilestonePopup();
     stopGameplayMarkup();
@@ -820,6 +1115,7 @@
 
   function showGame() {
     state.screen = 'game';
+    document.body.classList.add('inGame');
     syncMobileViewportState();
     tryLockLandscape();
     initYandexSdk();
@@ -2013,10 +2309,230 @@
     }
   }
 
+  function syncThemeControls() {
+    if (themeSelect) themeSelect.value = currentThemeKey;
+    if (themeCycleBtn) themeCycleBtn.textContent = getThemeLabel(currentThemeKey);
+  }
+
+  function syncAudioButtons() {
+    if (musicToggleBtn) {
+      musicToggleBtn.classList.toggle('isOff', !musicEnabled);
+      musicToggleBtn.setAttribute('aria-label', musicEnabled ? t('music_off') : t('music_on'));
+      musicToggleBtn.title = musicEnabled ? t('music_off') : t('music_on');
+    }
+    if (soundToggleBtn) {
+      soundToggleBtn.classList.toggle('isOff', !soundEnabled);
+      soundToggleBtn.setAttribute('aria-label', soundEnabled ? t('sound_off') : t('sound_on'));
+      soundToggleBtn.title = soundEnabled ? t('sound_off') : t('sound_on');
+    }
+  }
+
+  function boardLabel(w = state.w, h = state.h, m = state.mines) {
+    return `${w}x${h} ${t('board_separator')} ${m} ${t('minute_mines')}`;
+  }
+
+  function clearHint() {
+    stopHintMode();
+    setHintText(t('hint_after_ad'));
+    clearHintPreview();
+  }
+
+  function showRewardedHintAd() {
+    if (yandex.adShowing) return Promise.resolve({ rewarded: false });
+
+    return initYandexSdk().then((ysdk) => new Promise((resolve) => {
+      if (!ysdk?.adv || typeof ysdk.adv.showRewardedVideo !== 'function') {
+        resolve({ rewarded: false, error: true });
+        return;
+      }
+
+      let settled = false;
+      let rewarded = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        yandex.adShowing = false;
+        startGameplayMarkup();
+        resolve(result);
+      };
+
+      stopGameplayMarkup();
+      yandex.adShowing = true;
+
+      try {
+        ysdk.adv.showRewardedVideo({
+          callbacks: {
+            onOpen: () => {
+              stopGameplayMarkup();
+              setHintText(t('watch_ad_to_end'));
+            },
+            onRewarded: () => {
+              rewarded = true;
+            },
+            onClose: () => {
+              finish({ rewarded });
+            },
+            onError: (err) => {
+              console.warn('Yandex rewarded ad failed', err);
+              finish({ rewarded: false, error: true });
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('Yandex rewarded ad failed', err);
+        finish({ rewarded: false, error: true });
+      }
+    }));
+  }
+
+  async function startHintMode() {
+    if (state.over || state.screen !== 'game' || state.hintAdPending) return;
+    if (state.hintMode) {
+      state.hintMode = false;
+      setHintText(t('hint_after_ad'));
+      syncHintButton();
+      draw();
+      return;
+    }
+
+    state.hintAdPending = true;
+    setHintText(t('loading_ad'), true);
+    syncHintButton();
+
+    const adResult = await showRewardedHintAd();
+    state.hintAdPending = false;
+    if (state.over || state.screen !== 'game') {
+      setHintText(t('hint_after_ad'));
+      syncHintButton();
+      return;
+    }
+
+    if (!adResult.rewarded) {
+      setHintText(adResult.error ? t('ad_unavailable') : t('need_watch_ad'), true);
+      syncHintButton();
+      window.setTimeout(() => {
+        if (!state.hintMode && !state.hintAdPending) setHintText(t('hint_after_ad'));
+      }, 1800);
+      return;
+    }
+
+    state.hintMode = true;
+    setHintText(t('choose_closed_cell'));
+    clearHintPreview();
+    syncHintButton();
+    draw();
+  }
+
+  function previewHintCell(x, y) {
+    if (state.over || !inBounds(x, y)) return false;
+    const cell = state.grid[idx(x, y)];
+    if (cell.revealed || cell.flagged) return false;
+
+    ensureMinesPlaced(x, y);
+    state.hintPreview = { x, y };
+    setHintText(t('hint_after_ad'));
+    stopHintMode();
+    if (state.hintPreviewId != null) clearTimeout(state.hintPreviewId);
+    state.hintPreviewId = setTimeout(() => {
+      state.hintPreview = null;
+      state.hintPreviewId = null;
+      draw();
+    }, 900);
+    draw();
+    return true;
+  }
+
+  function getSelection() {
+    const preset = presetSelect.value;
+    if (preset === 'custom') {
+      const w = clamp(customW.valueAsNumber || 16, 5, 60);
+      const h = clamp(customH.valueAsNumber || 16, 5, 40);
+      const m = clamp(customM.valueAsNumber || 40, 1, w * h - 1);
+      return {
+        preset: 'custom',
+        w,
+        h,
+        m,
+        label: `${t('custom_board')} (${boardLabel(w, h, m)})`,
+        recordKey: `custom:${w}x${h}:${m}`,
+      };
+    }
+    const pr = PRESETS[preset] || PRESETS.beginner;
+    return {
+      preset,
+      w: pr.w,
+      h: pr.h,
+      m: pr.m,
+      label: `${getPresetLabel(preset)} (${boardLabel(pr.w, pr.h, pr.m)})`,
+      recordKey: preset,
+    };
+  }
+
+  function showRecordsModal() {
+    const selection = getSelection();
+    const best = readRecord(selection.recordKey);
+    recordsName.textContent = selection.label;
+    recordsValue.textContent = best == null ? t('no_record') : `${fmt3(best)} ${t('sec_short')}`;
+    recordsModal.hidden = false;
+  }
+
+  function syncLossContinueButton() {
+    if (!lossContinue) return;
+    lossContinue.disabled = state.lossContinuePending || state.lossContinueUsed;
+    if (state.lossContinuePending) {
+      setLossContinueLabel(t('loading'));
+      return;
+    }
+    if (state.lossContinueUsed) {
+      setLossContinueLabel(t('continue_used'));
+      return;
+    }
+    setLossContinueLabel(t('loss_continue'));
+  }
+
+  function scheduleLossContinueLabelReset() {
+    window.setTimeout(() => {
+      if (state.lossContinuePending || state.lossContinueUsed) return;
+      setLossContinueLabel(t('loss_continue'));
+    }, 1800);
+  }
+
+  async function continueAfterRewardAd() {
+    if (state.lossContinueUsed || state.lossContinuePending || !state.over || state.won) return;
+
+    state.lossContinuePending = true;
+    syncLossContinueButton();
+
+    const adResult = await showRewardedContinueAd();
+    state.lossContinuePending = false;
+
+    if (!state.over || state.won) {
+      syncLossContinueButton();
+      return;
+    }
+
+    if (!adResult.rewarded) {
+      setLossContinueLabel(adResult.error ? t('ad_unavailable') : t('need_watch_short'));
+      if (lossContinue) lossContinue.disabled = false;
+      scheduleLossContinueLabelReset();
+      return;
+    }
+
+    if (!reviveAfterLoss()) {
+      setLossContinueLabel(t('unable_continue'));
+      if (lossContinue) lossContinue.disabled = false;
+      scheduleLossContinueLabelReset();
+      return;
+    }
+
+    syncLossContinueButton();
+  }
+
   faceBtn.addEventListener('click', restartSameSettings);
   if (hintBtn) hintBtn.addEventListener('click', startHintMode);
   if (playBtn) playBtn.addEventListener('click', startSelectedGame);
   if (menuBtn) menuBtn.addEventListener('click', showMenu);
+  if (languageToggleBtn) languageToggleBtn.addEventListener('click', toggleLanguage);
   if (musicToggleBtn) musicToggleBtn.addEventListener('click', toggleMusic);
   if (soundToggleBtn) soundToggleBtn.addEventListener('click', toggleSound);
   if (themeCycleBtn) themeCycleBtn.addEventListener('click', cycleTheme);
@@ -2104,8 +2620,8 @@
   updateCustomVisibility();
   syncMobileViewportState();
   syncSoundVolumes();
-  syncAudioButtons();
   applyTheme(currentThemeKey);
+  applyLanguage(currentLanguage, false);
   initYandexSdk();
   showMenu();
 })();
