@@ -15,6 +15,8 @@
   const playBtn = document.getElementById('playBtn');
   const menuBtn = document.getElementById('menuBtn');
   const themeCycleBtn = document.getElementById('themeCycleBtn');
+  const musicToggleBtn = document.getElementById('musicToggleBtn');
+  const soundToggleBtn = document.getElementById('soundToggleBtn');
   const recordsBtn = document.getElementById('recordsBtn');
   const recordsModal = document.getElementById('recordsModal');
   const recordsClose = document.getElementById('recordsClose');
@@ -52,7 +54,13 @@
   };
   let musicTracks = [];
   let currentMusicIndex = -1;
-  let musicEnabled = false;
+  let musicPlaybackActive = false;
+  let musicEnabled = readStoredAudioSetting('music', true);
+  let soundEnabled = readStoredAudioSetting('sound', true);
+  const SOUND_VOLUMES = {
+    defeat: 0.3,
+    victory: 1,
+  };
 
   const yandex = {
     ysdk: null,
@@ -87,7 +95,7 @@
     nordic: {
       label: 'Nordic',
       font: '"Trebuchet MS", "Gill Sans", Candara, ui-sans-serif, system-ui, sans-serif',
-      musicFiles: ['./assets/sounds/1.mp3', './assets/sounds/2.mp3', './assets/sounds/3.mp3'],
+      musicFiles: ['./assets/sounds/nordic1.mp3', './assets/sounds/nordic2.mp3', './assets/sounds/nordic3.mp3'],
       colors: {
         boardBg: '#061016',
         glowA: 'rgba(144,224,239,.18)',
@@ -109,8 +117,7 @@
     space: {
       label: 'Space',
       font: '"Segoe UI", "Arial", ui-sans-serif, system-ui, sans-serif',
-      // Add these files later to give the theme its own playlist.
-      musicFiles: ['./assets/sounds/space-1.mp3', './assets/sounds/space-2.mp3', './assets/sounds/space-3.mp3'],
+      musicFiles: ['./assets/sounds/space1.mp3', './assets/sounds/space2.mp3', './assets/sounds/space3.mp3'],
       colors: {
         boardBg: '#050713',
         glowA: 'rgba(121,242,255,.16)',
@@ -132,8 +139,7 @@
     medieval: {
       label: 'Medieval',
       font: 'Georgia, "Times New Roman", ui-serif, serif',
-      // Add these files later to give the theme its own playlist.
-      musicFiles: ['./assets/sounds/medieval-1.mp3', './assets/sounds/medieval-2.mp3', './assets/sounds/medieval-3.mp3'],
+      musicFiles: ['./assets/sounds/medieval1.mp3', './assets/sounds/medieval2.mp3', './assets/sounds/medieval3.mp3'],
       colors: {
         boardBg: '#120d08',
         glowA: 'rgba(212,175,55,.16)',
@@ -476,6 +482,15 @@
     return 'nordic';
   }
 
+  function readStoredAudioSetting(key, fallback) {
+    try {
+      const raw = localStorage.getItem(`miner-audio:${key}`);
+      if (raw === '1') return true;
+      if (raw === '0') return false;
+    } catch {}
+    return fallback;
+  }
+
   function activeTheme() {
     return THEMES[currentThemeKey] || THEMES.nordic;
   }
@@ -486,10 +501,29 @@
     } catch {}
   }
 
+  function saveAudioSetting(key, enabled) {
+    try {
+      localStorage.setItem(`miner-audio:${key}`, enabled ? '1' : '0');
+    } catch {}
+  }
+
   function syncThemeControls() {
     const theme = activeTheme();
     if (themeSelect) themeSelect.value = currentThemeKey;
     if (themeCycleBtn) themeCycleBtn.textContent = theme.label;
+  }
+
+  function syncAudioButtons() {
+    if (musicToggleBtn) {
+      musicToggleBtn.classList.toggle('isOff', !musicEnabled);
+      musicToggleBtn.setAttribute('aria-label', musicEnabled ? 'Выключить музыку' : 'Включить музыку');
+      musicToggleBtn.title = musicEnabled ? 'Выключить музыку' : 'Включить музыку';
+    }
+    if (soundToggleBtn) {
+      soundToggleBtn.classList.toggle('isOff', !soundEnabled);
+      soundToggleBtn.setAttribute('aria-label', soundEnabled ? 'Выключить звуки' : 'Включить звуки');
+      soundToggleBtn.title = soundEnabled ? 'Выключить звуки' : 'Включить звуки';
+    }
   }
 
   function applyTheme(themeKey, restartMusic = false) {
@@ -502,7 +536,7 @@
     syncThemeControls();
     configureMusicTracks();
 
-    if (restartMusic && changed && musicEnabled && state.screen === 'game' && !state.over) {
+    if (restartMusic && changed && !musicPlaybackActive && musicEnabled && state.screen === 'game' && !state.over) {
       startGameMusic();
     }
     if (state.screen === 'game') draw();
@@ -512,6 +546,27 @@
     const currentIndex = Math.max(0, THEME_KEYS.indexOf(currentThemeKey));
     const nextTheme = THEME_KEYS[(currentIndex + 1) % THEME_KEYS.length];
     applyTheme(nextTheme, true);
+  }
+
+  function toggleMusic() {
+    musicEnabled = !musicEnabled;
+    saveAudioSetting('music', musicEnabled);
+    syncAudioButtons();
+    if (!musicEnabled) {
+      stopGameMusic();
+      return;
+    }
+    if (state.screen === 'game' && !state.over) {
+      startGameMusic();
+    }
+  }
+
+  function toggleSound() {
+    soundEnabled = !soundEnabled;
+    saveAudioSetting('sound', soundEnabled);
+    if (!soundEnabled) stopOutcomeSounds();
+    syncSoundVolumes();
+    syncAudioButtons();
   }
 
   function idx(x, y) {
@@ -958,7 +1013,13 @@
     });
   }
 
+  function syncSoundVolumes() {
+    outcomeSounds.defeat.volume = soundEnabled ? SOUND_VOLUMES.defeat : 0;
+    outcomeSounds.victory.volume = soundEnabled ? SOUND_VOLUMES.victory : 0;
+  }
+
   function playOutcomeSound(type) {
+    if (!soundEnabled) return;
     const sound = outcomeSounds[type];
     if (!sound) return;
     stopOutcomeSounds();
@@ -969,7 +1030,7 @@
   }
 
   function configureMusicTracks() {
-    const wasEnabled = musicEnabled;
+    const shouldResume = musicPlaybackActive;
     if (musicTracks.length) {
       musicTracks.forEach((track) => {
         track.pause();
@@ -979,20 +1040,24 @@
 
     musicTracks = activeTheme().musicFiles.map((src) => new Audio(src));
     currentMusicIndex = -1;
-    musicEnabled = wasEnabled;
+    musicPlaybackActive = false;
 
-    musicTracks.forEach((track, index) => {
+    musicTracks.forEach((track) => {
       track.volume = 0.45;
       track.addEventListener('ended', () => {
-        if (musicEnabled && !state.over && state.screen === 'game') {
-          playNextMusicTrack(index);
+        if (musicPlaybackActive && musicEnabled && !state.over && state.screen === 'game') {
+          playNextMusicTrack();
         }
       });
     });
+
+    if (shouldResume && musicEnabled && state.screen === 'game' && !state.over) {
+      startGameMusic();
+    }
   }
 
   function stopGameMusic() {
-    musicEnabled = false;
+    musicPlaybackActive = false;
     musicTracks.forEach((track) => {
       track.pause();
       track.currentTime = 0;
@@ -1000,17 +1065,17 @@
     currentMusicIndex = -1;
   }
 
-  function playNextMusicTrack(previousIndex = currentMusicIndex) {
+  function playNextMusicTrack() {
     if (!musicEnabled || state.over || state.screen !== 'game' || musicTracks.length === 0) return;
 
-    if (previousIndex >= 0 && musicTracks[previousIndex]) {
-      musicTracks[previousIndex].pause();
-      musicTracks[previousIndex].currentTime = 0;
+    if (currentMusicIndex >= 0 && musicTracks[currentMusicIndex]) {
+      musicTracks[currentMusicIndex].pause();
+      musicTracks[currentMusicIndex].currentTime = 0;
     }
 
     let nextIndex = Math.floor(Math.random() * musicTracks.length);
     if (musicTracks.length > 1) {
-      while (nextIndex === previousIndex) {
+      while (nextIndex === currentMusicIndex) {
         nextIndex = Math.floor(Math.random() * musicTracks.length);
       }
     }
@@ -1025,7 +1090,8 @@
 
   function startGameMusic() {
     stopGameMusic();
-    musicEnabled = true;
+    if (!musicEnabled) return;
+    musicPlaybackActive = true;
     playNextMusicTrack();
   }
 
@@ -1673,6 +1739,8 @@
   if (hintBtn) hintBtn.addEventListener('click', startHintMode);
   if (playBtn) playBtn.addEventListener('click', startSelectedGame);
   if (menuBtn) menuBtn.addEventListener('click', showMenu);
+  if (musicToggleBtn) musicToggleBtn.addEventListener('click', toggleMusic);
+  if (soundToggleBtn) soundToggleBtn.addEventListener('click', toggleSound);
   if (themeCycleBtn) themeCycleBtn.addEventListener('click', cycleTheme);
   if (recordsBtn) recordsBtn.addEventListener('click', showRecordsModal);
   if (themeSelect) {
@@ -1748,6 +1816,8 @@
   });
 
   updateCustomVisibility();
+  syncSoundVolumes();
+  syncAudioButtons();
   applyTheme(currentThemeKey);
   initYandexSdk();
   showMenu();

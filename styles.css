@@ -243,6 +243,41 @@ body[data-theme="medieval"]{
   margin-right:18px;
 }
 
+.audioToggle{
+  position:relative;
+  width:46px;
+  height:46px;
+  border-radius:13px;
+  background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+  box-shadow:0 10px 24px rgba(0,0,0,.18);
+}
+.audioToggle svg{
+  width:20px;
+  height:20px;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.audioToggle.isOff{
+  color:var(--muted);
+  background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+  border-color:rgba(255,255,255,.10);
+}
+.audioToggle.isOff::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:28px;
+  height:2px;
+  background:currentColor;
+  transform:translate(-50%, -50%) rotate(-38deg);
+  border-radius:999px;
+  pointer-events:none;
+}
+
 #menuBtn{
   min-height:46px;
   padding:10px 18px;
