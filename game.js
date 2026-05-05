@@ -52,6 +52,10 @@
     defeat: new Audio('./assets/sounds/defeat.mpeg'),
     victory: new Audio('./assets/sounds/game-won.mp3'),
   };
+  const mineImages = {
+    medieval: loadImage('./assets/powder.png'),
+    space: loadImage('./assets/black-hole.png'),
+  };
   let musicTracks = [];
   let currentMusicIndex = -1;
   let musicPlaybackActive = false;
@@ -93,7 +97,7 @@
 
   const THEMES = {
     nordic: {
-      label: 'Nordic',
+      label: 'Нордик',
       font: '"Trebuchet MS", "Gill Sans", Candara, ui-sans-serif, system-ui, sans-serif',
       musicFiles: ['./assets/sounds/nordic1.mp3', './assets/sounds/nordic2.mp3', './assets/sounds/nordic3.mp3'],
       colors: {
@@ -115,7 +119,7 @@
       },
     },
     space: {
-      label: 'Space',
+      label: 'Космос',
       font: '"Segoe UI", "Arial", ui-sans-serif, system-ui, sans-serif',
       musicFiles: ['./assets/sounds/space1.mp3', './assets/sounds/space2.mp3', './assets/sounds/space3.mp3'],
       colors: {
@@ -137,7 +141,7 @@
       },
     },
     medieval: {
-      label: 'Medieval',
+      label: 'История',
       font: 'Georgia, "Times New Roman", ui-serif, serif',
       musicFiles: ['./assets/sounds/medieval1.mp3', './assets/sounds/medieval2.mp3', './assets/sounds/medieval3.mp3'],
       colors: {
@@ -182,6 +186,16 @@
       });
 
     return yandex.initPromise;
+  }
+
+  function loadImage(src) {
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = src;
+    img.addEventListener('load', () => {
+      if (state.screen === 'game') draw();
+    });
+    return img;
   }
 
   function notifyGameReady() {
@@ -1550,7 +1564,57 @@
     const cy = py + s / 2;
     const r = s * 0.24;
 
+    if (currentThemeKey === 'nordic') {
+      ctx.strokeStyle = colors.mine;
+      ctx.lineWidth = Math.max(1.5, Math.floor(s * 0.05));
+      for (let i = 0; i < 6; i++) {
+        const a = -Math.PI / 2 + (i / 6) * Math.PI * 2;
+        const inner = r * 0.24;
+        const outer = r * 1.55;
+        const sx = cx + Math.cos(a) * inner;
+        const sy = cy + Math.sin(a) * inner;
+        const ex = cx + Math.cos(a) * outer;
+        const ey = cy + Math.sin(a) * outer;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+
+        const branchLen = r * 0.44;
+        const branchA = a + Math.PI / 6;
+        const branchB = a - Math.PI / 6;
+        const bx = cx + Math.cos(a) * (r * 0.98);
+        const by = cy + Math.sin(a) * (r * 0.98);
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(branchA) * branchLen, by + Math.sin(branchA) * branchLen);
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(branchB) * branchLen, by + Math.sin(branchB) * branchLen);
+        ctx.stroke();
+
+        const tx = cx + Math.cos(a) * (r * 1.34);
+        const ty = cy + Math.sin(a) * (r * 1.34);
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(tx + Math.cos(branchA) * (branchLen * 0.72), ty + Math.sin(branchA) * (branchLen * 0.72));
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(tx + Math.cos(branchB) * (branchLen * 0.72), ty + Math.sin(branchB) * (branchLen * 0.72));
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = colors.mine;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = colors.mineHi;
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.12, cy - r * 0.16, r * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
     if (currentThemeKey === 'space') {
+      if (drawThemeMineImage(mineImages.space, px, py, s, colors)) return;
       ctx.fillStyle = colors.mine;
       ctx.beginPath();
       ctx.moveTo(cx - r * 1.2, cy - r * 0.45);
@@ -1572,6 +1636,7 @@
     }
 
     if (currentThemeKey === 'medieval') {
+      if (drawThemeMineImage(mineImages.medieval, px, py, s, colors)) return;
       ctx.strokeStyle = colors.mine;
       ctx.lineWidth = Math.max(2, Math.floor(s * 0.07));
       ctx.beginPath();
@@ -1633,6 +1698,28 @@
     ctx.beginPath();
     ctx.arc(cx - r * 0.35, cy - r * 0.35, r * 0.35, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  function drawThemeMineImage(img, px, py, s, colors) {
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return false;
+
+    const pad = s * 0.08;
+    const size = s - pad * 2;
+    const radius = size * 0.26;
+
+    ctx.save();
+    ctx.beginPath();
+    roundRectPath(ctx, px + pad, py + pad, size, size, radius);
+    ctx.clip();
+    ctx.drawImage(img, px + pad, py + pad, size, size);
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = colors.openStroke;
+    ctx.lineWidth = Math.max(1, Math.floor(s * 0.04));
+    roundRectStroke(ctx, px + pad, py + pad, size, size, radius);
+    ctx.restore();
+    return true;
   }
 
   function roundRectPath(ctx2, x, y, w, h, r) {
