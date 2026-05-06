@@ -341,6 +341,7 @@
     yandex.initPromise = window.YaGames.init()
       .then((ysdk) => {
         yandex.ysdk = ysdk;
+        syncLanguageFromYandex(ysdk);
         notifyGameReady();
         loadYandexPlayer();
         return ysdk;
@@ -704,6 +705,36 @@
       if (stored === 'ru' || stored === 'en') return stored;
     } catch {}
     return 'ru';
+  }
+
+  function normalizeLanguage(lang) {
+    const value = String(lang || '').trim().toLowerCase();
+    if (value.startsWith('ru')) return 'ru';
+    if (value.startsWith('en')) return 'en';
+    return null;
+  }
+
+  function readYandexLanguage(ysdk = yandex.ysdk) {
+    if (!ysdk) return null;
+    const candidates = [
+      ysdk.environment?.i18n?.lang,
+      ysdk.environment?.i18n?.language,
+      ysdk.environment?.lang,
+      ysdk.environment?.language,
+      ysdk.deviceInfo?.lang,
+      ysdk.deviceInfo?.language,
+    ];
+    for (const candidate of candidates) {
+      const normalized = normalizeLanguage(candidate);
+      if (normalized) return normalized;
+    }
+    return null;
+  }
+
+  function syncLanguageFromYandex(ysdk = yandex.ysdk) {
+    const sdkLanguage = readYandexLanguage(ysdk);
+    if (!sdkLanguage || sdkLanguage === currentLanguage) return;
+    applyLanguage(sdkLanguage, false);
   }
 
   function readStoredAudioSetting(key, fallback) {
