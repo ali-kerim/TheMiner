@@ -59,7 +59,12 @@ body[data-theme="medieval"]{
 }
 
 *{box-sizing:border-box}
-html,body{height:100%}
+html,body{
+  height:100%;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+}
 [hidden]{
   display:none !important;
 }
@@ -69,6 +74,12 @@ body{
   background: radial-gradient(1200px 800px at 20% 0%, #172042 0%, var(--bg0) 45%, #090a0f 100%);
   color:var(--text);
   overflow:hidden;
+}
+
+canvas{
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
 }
 
 .languageToggle{

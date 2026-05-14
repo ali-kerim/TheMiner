@@ -2464,6 +2464,13 @@
     ctx2.stroke();
   }
 
+  // Disable the browser context menu globally so right click and long press
+  // stay inside the game's own input model on desktop and mobile.
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Prevent accidental text selection during rapid taps, drags, and long press.
+  document.addEventListener('selectstart', (e) => e.preventDefault());
+
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   canvas.addEventListener('pointerdown', (e) => {
