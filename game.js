@@ -203,7 +203,8 @@
   };
   const THEME_KEYS = Object.keys(THEMES);
   let currentThemeKey = readStoredThemeKey();
-  let currentLanguage = readStoredLanguage();
+  const storedLanguagePreference = readStoredLanguagePreference();
+  let currentLanguage = storedLanguagePreference || 'ru';
   const I18N = {
     ru: {
       html_lang: 'ru',
@@ -717,12 +718,12 @@
     return 'nordic';
   }
 
-  function readStoredLanguage() {
+  function readStoredLanguagePreference() {
     try {
       const stored = localStorage.getItem('miner-language');
       if (stored === 'ru' || stored === 'en') return stored;
     } catch {}
-    return 'ru';
+    return null;
   }
 
   function normalizeLanguage(lang) {
@@ -734,8 +735,11 @@
 
   function readYandexLanguage(ysdk = yandex.ysdk) {
     if (!ysdk) return null;
+    // Yandex moderation checks startup auto-detection specifically through
+    // `environment.i18n.lang`, so we read that field first and use it directly.
+    const directSdkLanguage = normalizeLanguage(ysdk.environment?.i18n?.lang);
+    if (directSdkLanguage) return directSdkLanguage;
     const candidates = [
-      ysdk.environment?.i18n?.lang,
       ysdk.environment?.i18n?.language,
       ysdk.environment?.lang,
       ysdk.environment?.language,
@@ -751,8 +755,11 @@
 
   function syncLanguageFromYandex(ysdk = yandex.ysdk) {
     const sdkLanguage = readYandexLanguage(ysdk);
+    // Always read the SDK language during startup so Yandex debug mode sees
+    // I18N usage, but keep manual player choice as a higher-priority override.
+    if (storedLanguagePreference) return;
     if (!sdkLanguage || sdkLanguage === currentLanguage) return;
-    applyLanguage(sdkLanguage, false);
+    applyLanguage(sdkLanguage, false, false);
   }
 
   function readStoredAudioSetting(key, fallback) {
@@ -791,7 +798,7 @@
     } catch {}
   }
 
-  function saveLanguage(lang) {
+  function saveLanguagePreference(lang) {
     try {
       localStorage.setItem('miner-language', lang);
     } catch {}
@@ -909,9 +916,13 @@
     if (lossBoardLabel) lossBoardLabel.textContent = t('field');
   }
 
-  function applyLanguage(lang, refreshRecords = true) {
+  function applyLanguage(lang, refreshRecords = true, persistPreference = true) {
     currentLanguage = lang === 'en' ? 'en' : 'ru';
-    saveLanguage(currentLanguage);
+    if (persistPreference) {
+      // Persist only explicit player choice so SDK auto-detection remains
+      // effective for first launch and Yandex debug validation.
+      saveLanguagePreference(currentLanguage);
+    }
     applyLanguageToDom();
     syncThemeControls();
     syncAudioButtons();
@@ -2898,7 +2909,14 @@
   syncMobileViewportState();
   syncSoundVolumes();
   applyTheme(currentThemeKey);
-  applyLanguage(currentLanguage, false);
-  initYandexSdk();
+  // Apply a fallback language immediately, then let SDK startup auto-detection
+  // replace it during launch when no manual language preference is stored.
+  applyLanguage(currentLanguage, false, Boolean(storedLanguagePreference));
+  initYandexSdk().then((ysdk) => {
+    const launchLanguage = readYandexLanguage(ysdk) || currentLanguage;
+    if (storedLanguagePreference) return ysdk;
+    applyLanguage(launchLanguage, false, false);
+    return ysdk;
+  });
   showMenu();
 })();
