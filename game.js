@@ -1556,12 +1556,18 @@
   }
 
   function decodeAudioDataCompat(audioContext, arrayBuffer) {
-    return new Promise((resolve, reject) => {
-      const copy = arrayBuffer.slice(0);
-      const decoded = audioContext.decodeAudioData(copy, resolve, reject);
+    const copy = arrayBuffer.slice(0);
+    try {
+      const decoded = audioContext.decodeAudioData(copy);
       if (decoded && typeof decoded.then === 'function') {
-        decoded.then(resolve, reject);
+        return decoded;
       }
+    } catch (err) {
+      // Older WebKit implementations may require the callback form below.
+    }
+
+    return new Promise((resolve, reject) => {
+      audioContext.decodeAudioData(copy, resolve, reject);
     });
   }
 
@@ -1569,14 +1575,40 @@
     return `${currentThemeKey}:${activeTheme().musicFiles.join('|')}`;
   }
 
+  function loadArrayBufferViaXhr(src) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', src, true);
+      xhr.responseType = 'arraybuffer';
+      xhr.onload = () => {
+        // In some local desktop runs the browser may report status 0 for file-like loads.
+        if ((xhr.status >= 200 && xhr.status < 300) || (xhr.status === 0 && xhr.response)) {
+          resolve(xhr.response);
+          return;
+        }
+        reject(new Error(`XHR music load failed: ${src} (${xhr.status})`));
+      };
+      xhr.onerror = () => reject(new Error(`XHR music load failed: ${src}`));
+      xhr.send();
+    });
+  }
+
   async function loadMusicBuffer(src) {
     const audioContext = ensureMusicAudioContext();
     if (!audioContext) return null;
-    const response = await fetch(src);
-    if (!response.ok) {
-      throw new Error(`Failed to load music file: ${src}`);
+
+    let arrayBuffer = null;
+    try {
+      const response = await fetch(src);
+      if (!response.ok) {
+        throw new Error(`Failed to load music file: ${src}`);
+      }
+      arrayBuffer = await response.arrayBuffer();
+    } catch (fetchErr) {
+      // Fallback for desktop/local runs where fetch() may be blocked for local assets.
+      arrayBuffer = await loadArrayBufferViaXhr(src);
     }
-    const arrayBuffer = await response.arrayBuffer();
+
     return decodeAudioDataCompat(audioContext, arrayBuffer);
   }
 
