@@ -78,9 +78,18 @@
     { threshold: 0.75, key: 75 },
     { threshold: 0.90, key: 90 },
   ];
-  let musicTracks = [];
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  const musicBufferCache = new Map();
   let currentMusicIndex = -1;
+  let musicBuffers = [];
   let musicPlaybackActive = false;
+  let musicAudioContext = null;
+  let musicGainNode = null;
+  let musicSourceNode = null;
+  let musicSourceStartedAt = 0;
+  let musicPauseOffset = 0;
+  let musicLoadToken = 0;
+  let currentMusicThemeCacheKey = '';
   // Remembers whether the current background track was actually playing
   // before the tab became hidden, so we do not auto-enable music on return.
   let musicWasPlayingBeforeHide = false;
@@ -90,6 +99,7 @@
     defeat: 0.3,
     victory: 1,
   };
+  const MUSIC_VOLUME = 0.45;
 
   const yandex = {
     ysdk: null,
@@ -1523,110 +1533,228 @@
     });
   }
 
-  function configureMusicTracks() {
-    const shouldResume = musicPlaybackActive;
-    if (musicTracks.length) {
-      musicTracks.forEach((track) => {
-        track.pause();
-        track.currentTime = 0;
-      });
+  function ensureMusicAudioContext() {
+    if (musicAudioContext || !AudioContextCtor) return musicAudioContext;
+
+    // The background music uses Web Audio so mobile browsers do not expose it
+    // as a separate media session in the system notification area.
+    musicAudioContext = new AudioContextCtor();
+    musicGainNode = musicAudioContext.createGain();
+    musicGainNode.gain.value = MUSIC_VOLUME;
+    musicGainNode.connect(musicAudioContext.destination);
+    return musicAudioContext;
+  }
+
+  function resumeMusicAudioContext() {
+    const audioContext = ensureMusicAudioContext();
+    if (!audioContext) return Promise.resolve(null);
+    if (audioContext.state === 'running') return Promise.resolve(audioContext);
+    return audioContext.resume().then(() => audioContext).catch((err) => {
+      console.warn('Music audio context resume failed', err);
+      return null;
+    });
+  }
+
+  function decodeAudioDataCompat(audioContext, arrayBuffer) {
+    return new Promise((resolve, reject) => {
+      const copy = arrayBuffer.slice(0);
+      const decoded = audioContext.decodeAudioData(copy, resolve, reject);
+      if (decoded && typeof decoded.then === 'function') {
+        decoded.then(resolve, reject);
+      }
+    });
+  }
+
+  function createMusicThemeCacheKey() {
+    return `${currentThemeKey}:${activeTheme().musicFiles.join('|')}`;
+  }
+
+  async function loadMusicBuffer(src) {
+    const audioContext = ensureMusicAudioContext();
+    if (!audioContext) return null;
+    const response = await fetch(src);
+    if (!response.ok) {
+      throw new Error(`Failed to load music file: ${src}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return decodeAudioDataCompat(audioContext, arrayBuffer);
+  }
+
+  async function loadMusic() {
+    const audioContext = ensureMusicAudioContext();
+    if (!audioContext) return [];
+
+    const cacheKey = createMusicThemeCacheKey();
+    if (currentMusicThemeCacheKey === cacheKey && musicBuffers.length) {
+      return musicBuffers;
     }
 
-    musicTracks = activeTheme().musicFiles.map((src) => new Audio(src));
+    let bufferPromise = musicBufferCache.get(cacheKey);
+    if (!bufferPromise) {
+      bufferPromise = Promise.all(activeTheme().musicFiles.map((src) => loadMusicBuffer(src)));
+      musicBufferCache.set(cacheKey, bufferPromise);
+    }
+
+    try {
+      const buffers = (await bufferPromise).filter(Boolean);
+      if (createMusicThemeCacheKey() === cacheKey) {
+        musicBuffers = buffers;
+        currentMusicThemeCacheKey = cacheKey;
+      }
+      return buffers;
+    } catch (err) {
+      musicBufferCache.delete(cacheKey);
+      console.warn('Background music loading failed', err);
+      return [];
+    }
+  }
+
+  function getCurrentMusicBuffer() {
+    if (currentMusicIndex < 0) return null;
+    return musicBuffers[currentMusicIndex] || null;
+  }
+
+  function getSafeMusicOffset(buffer, offset) {
+    if (!buffer || !buffer.duration) return 0;
+    const normalizedOffset = offset % buffer.duration;
+    return normalizedOffset >= 0 ? normalizedOffset : normalizedOffset + buffer.duration;
+  }
+
+  function teardownMusicSource(keepOffset = false) {
+    if (!musicSourceNode) {
+      if (!keepOffset) musicPauseOffset = 0;
+      return;
+    }
+
+    const currentBuffer = musicSourceNode.buffer;
+    if (keepOffset && currentBuffer) {
+      const elapsed = musicAudioContext.currentTime - musicSourceStartedAt;
+      musicPauseOffset = getSafeMusicOffset(currentBuffer, elapsed);
+    } else {
+      musicPauseOffset = 0;
+    }
+
+    const sourceNode = musicSourceNode;
+    musicSourceNode = null;
+    try {
+      sourceNode.stop();
+    } catch (err) {
+      // Source nodes are one-shot; stopping an already finished node is safe to ignore.
+    }
+    sourceNode.disconnect();
+  }
+
+  function pickNextMusicIndex(buffers) {
+    if (!buffers.length) return -1;
+    let nextIndex = Math.floor(Math.random() * buffers.length);
+    if (buffers.length > 1) {
+      while (nextIndex === currentMusicIndex) {
+        nextIndex = Math.floor(Math.random() * buffers.length);
+      }
+    }
+    return nextIndex;
+  }
+
+  function configureMusicTracks() {
+    const shouldResume = musicPlaybackActive;
+    musicLoadToken++;
+    teardownMusicSource(false);
+    musicBuffers = [];
+    currentMusicThemeCacheKey = '';
     currentMusicIndex = -1;
     musicPlaybackActive = false;
-
-    musicTracks.forEach((track) => {
-      track.volume = 0.45;
-      track.addEventListener('ended', () => {
-        if (musicPlaybackActive && musicEnabled && !state.over && state.screen === 'game') {
-          playNextMusicTrack();
-        }
-      });
-    });
 
     if (shouldResume && musicEnabled && state.screen === 'game' && !state.over) {
       startGameMusic();
     }
   }
 
-  function stopGameMusic() {
+  function stopMusic() {
+    musicLoadToken++;
     musicPlaybackActive = false;
     musicWasPlayingBeforeHide = false;
-    musicTracks.forEach((track) => {
-      track.pause();
-      track.currentTime = 0;
-    });
+    teardownMusicSource(false);
     currentMusicIndex = -1;
   }
 
-  function getCurrentMusicTrack() {
-    if (currentMusicIndex < 0) return null;
-    return musicTracks[currentMusicIndex] || null;
+  function pauseMusic() {
+    musicLoadToken++;
+    teardownMusicSource(true);
+  }
+
+  async function playMusic() {
+    if (!musicEnabled || state.over || state.screen !== 'game') return;
+
+    musicPlaybackActive = true;
+    const playbackToken = ++musicLoadToken;
+    const audioContext = await resumeMusicAudioContext();
+    if (!audioContext) return;
+
+    const buffers = await loadMusic();
+    if (
+      playbackToken !== musicLoadToken ||
+      !musicPlaybackActive ||
+      !musicEnabled ||
+      state.over ||
+      state.screen !== 'game' ||
+      !buffers.length
+    ) {
+      return;
+    }
+
+    if (currentMusicIndex < 0 || !buffers[currentMusicIndex]) {
+      currentMusicIndex = pickNextMusicIndex(buffers);
+      musicPauseOffset = 0;
+    }
+
+    const currentBuffer = getCurrentMusicBuffer();
+    if (!currentBuffer || !musicGainNode) return;
+
+    // AudioBufferSourceNode cannot be restarted after stop(), so we create
+    // a fresh looping node every time we resume or switch tracks.
+    if (musicSourceNode) {
+      teardownMusicSource(false);
+    }
+    const sourceNode = audioContext.createBufferSource();
+    sourceNode.buffer = currentBuffer;
+    sourceNode.loop = true;
+    sourceNode.connect(musicGainNode);
+    musicSourceNode = sourceNode;
+
+    const startOffset = getSafeMusicOffset(currentBuffer, musicPauseOffset);
+    musicSourceStartedAt = audioContext.currentTime - startOffset;
+    sourceNode.start(0, startOffset);
+  }
+
+  function stopGameMusic() {
+    stopMusic();
   }
 
   function handleDocumentVisibilityChange() {
-    const currentTrack = getCurrentMusicTrack();
-
     if (document.hidden) {
-      // Pause only the active track and remember its real playback state.
-      // This keeps manual mute behavior intact and avoids restarting music
-      // that never played in the first place.
-      musicWasPlayingBeforeHide = Boolean(
-        currentTrack &&
-        musicEnabled &&
-        musicPlaybackActive &&
-        !currentTrack.paused &&
-        !currentTrack.ended
-      );
-
+      // Pause only if music was really playing before hiding the tab.
+      musicWasPlayingBeforeHide = Boolean(musicSourceNode && musicEnabled && musicPlaybackActive);
       if (musicWasPlayingBeforeHide) {
-        currentTrack.pause();
+        pauseMusic();
       }
       return;
     }
 
-    // Resume only when the track was playing before the tab was hidden,
-    // the user still allows music, and the game is in a playable state.
-    if (!musicWasPlayingBeforeHide || !musicEnabled || state.over || state.screen !== 'game' || !currentTrack) {
+    // Resume only when the player did not mute music manually and the game
+    // is still in a state where music is supposed to be active.
+    if (!musicWasPlayingBeforeHide || !musicEnabled || state.over || state.screen !== 'game') {
       musicWasPlayingBeforeHide = false;
       return;
     }
 
-    currentTrack.play().catch((err) => {
-      console.warn('Background music resume failed', err);
-    });
     musicWasPlayingBeforeHide = false;
-  }
-
-  function playNextMusicTrack() {
-    if (!musicEnabled || state.over || state.screen !== 'game' || musicTracks.length === 0) return;
-
-    if (currentMusicIndex >= 0 && musicTracks[currentMusicIndex]) {
-      musicTracks[currentMusicIndex].pause();
-      musicTracks[currentMusicIndex].currentTime = 0;
-    }
-
-    let nextIndex = Math.floor(Math.random() * musicTracks.length);
-    if (musicTracks.length > 1) {
-      while (nextIndex === currentMusicIndex) {
-        nextIndex = Math.floor(Math.random() * musicTracks.length);
-      }
-    }
-
-    currentMusicIndex = nextIndex;
-    const track = musicTracks[currentMusicIndex];
-    track.currentTime = 0;
-    track.play().catch((err) => {
-      console.warn('Background music playback failed', err);
-    });
+    void playMusic();
   }
 
   function startGameMusic() {
-    stopGameMusic();
+    stopMusic();
     if (!musicEnabled) return;
-    musicPlaybackActive = true;
-    playNextMusicTrack();
+    void playMusic();
   }
 
   function startTimer() {
