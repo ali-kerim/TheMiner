@@ -31,6 +31,9 @@
   const faceBtn = document.getElementById('faceBtn');
   const hintBtn = document.getElementById('hintBtn');
   const hintText = document.getElementById('hintText');
+  const hintControl = document.querySelector('.hintControl');
+  const hintInfoPopup = document.getElementById('hintInfoPopup');
+  const hintInfoPopupText = document.getElementById('hintInfoPopupText');
   const panelEl = document.querySelector('.panel');
   const milestonePopup = document.getElementById('milestonePopup');
   const milestonePopupImage = document.getElementById('milestonePopupImage');
@@ -250,6 +253,7 @@
       watch_ad_to_end: 'Смотрите рекламу до конца',
       loading_ad: 'Загружаем рекламу...',
       need_watch_ad: 'Нужно досмотреть рекламу',
+      hint_make_first_move: 'Сделайте первых ход',
       choose_closed_cell: 'Выберите закрытую клетку',
       switch_language: 'Переключить язык',
       switch_to_en: 'Switch to English',
@@ -320,6 +324,7 @@
       watch_ad_to_end: 'Watch the ad to the end',
       loading_ad: 'Loading ad...',
       need_watch_ad: 'You need to watch the ad',
+      hint_make_first_move: 'Make the first move',
       choose_closed_cell: 'Choose a closed cell',
       switch_language: 'Switch language',
       switch_to_en: 'Switch to English',
@@ -844,6 +849,8 @@
       hintBtn.setAttribute('aria-label', t('hint'));
       hintBtn.title = t('hint_button_title');
     }
+    if (hintInfoPopup) hintInfoPopup.setAttribute('aria-label', t('hint'));
+    if (hintInfoPopupText) hintInfoPopupText.textContent = t('hint_make_first_move');
     if (themeCycleBtn) {
       themeCycleBtn.setAttribute('aria-label', t('theme'));
       themeCycleBtn.title = t('theme');
@@ -1022,6 +1029,18 @@
     hintText.classList.toggle('isWarn', warn);
   }
 
+  function showHintInfoPopup() {
+    if (!hintInfoPopup) return;
+    // Show a small local dialog under the hint button before the first move.
+    if (hintInfoPopupText) hintInfoPopupText.textContent = t('hint_make_first_move');
+    hintInfoPopup.hidden = false;
+  }
+
+  function hideHintInfoPopup() {
+    if (!hintInfoPopup) return;
+    hintInfoPopup.hidden = true;
+  }
+
   function syncHintButton() {
     if (!hintBtn) return;
     hintBtn.classList.toggle('isActive', state.hintMode);
@@ -1043,6 +1062,7 @@
 
   function clearHint() {
     stopHintMode();
+    hideHintInfoPopup();
     setHintText('Подсказка после рекламы');
     clearHintPreview();
   }
@@ -2630,12 +2650,22 @@
     if (state.over || state.screen !== 'game' || state.hintAdPending) return;
     if (state.hintMode) {
       state.hintMode = false;
+      hideHintInfoPopup();
       setHintText(t('hint_after_ad'));
       syncHintButton();
       draw();
       return;
     }
 
+    // Before the first move, the player should not watch an ad for a hint yet.
+    if (!state.started) {
+      if (hintInfoPopup && !hintInfoPopup.hidden) hideHintInfoPopup();
+      else showHintInfoPopup();
+      syncHintButton();
+      return;
+    }
+
+    hideHintInfoPopup();
     state.hintAdPending = true;
     setHintText(t('loading_ad'), true);
     syncHintButton();
@@ -2779,6 +2809,11 @@
   if (themeCycleBtn) themeCycleBtn.addEventListener('click', cycleTheme);
   if (recordsBtn) recordsBtn.addEventListener('click', showRecordsModal);
   document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
+  document.addEventListener('pointerdown', (e) => {
+    if (!hintInfoPopup || hintInfoPopup.hidden || !hintControl) return;
+    // Close the local hint popup when the player interacts outside the hint area.
+    if (!hintControl.contains(e.target)) hideHintInfoPopup();
+  });
   if (themeSelect) {
     themeSelect.addEventListener('change', () => {
       applyTheme(themeSelect.value, true);
