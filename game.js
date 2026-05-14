@@ -81,6 +81,9 @@
   let musicTracks = [];
   let currentMusicIndex = -1;
   let musicPlaybackActive = false;
+  // Remembers whether the current background track was actually playing
+  // before the tab became hidden, so we do not auto-enable music on return.
+  let musicWasPlayingBeforeHide = false;
   let musicEnabled = readStoredAudioSetting('music', true);
   let soundEnabled = readStoredAudioSetting('sound', true);
   const SOUND_VOLUMES = {
@@ -1549,11 +1552,51 @@
 
   function stopGameMusic() {
     musicPlaybackActive = false;
+    musicWasPlayingBeforeHide = false;
     musicTracks.forEach((track) => {
       track.pause();
       track.currentTime = 0;
     });
     currentMusicIndex = -1;
+  }
+
+  function getCurrentMusicTrack() {
+    if (currentMusicIndex < 0) return null;
+    return musicTracks[currentMusicIndex] || null;
+  }
+
+  function handleDocumentVisibilityChange() {
+    const currentTrack = getCurrentMusicTrack();
+
+    if (document.hidden) {
+      // Pause only the active track and remember its real playback state.
+      // This keeps manual mute behavior intact and avoids restarting music
+      // that never played in the first place.
+      musicWasPlayingBeforeHide = Boolean(
+        currentTrack &&
+        musicEnabled &&
+        musicPlaybackActive &&
+        !currentTrack.paused &&
+        !currentTrack.ended
+      );
+
+      if (musicWasPlayingBeforeHide) {
+        currentTrack.pause();
+      }
+      return;
+    }
+
+    // Resume only when the track was playing before the tab was hidden,
+    // the user still allows music, and the game is in a playable state.
+    if (!musicWasPlayingBeforeHide || !musicEnabled || state.over || state.screen !== 'game' || !currentTrack) {
+      musicWasPlayingBeforeHide = false;
+      return;
+    }
+
+    currentTrack.play().catch((err) => {
+      console.warn('Background music resume failed', err);
+    });
+    musicWasPlayingBeforeHide = false;
   }
 
   function playNextMusicTrack() {
@@ -2568,6 +2611,7 @@
   if (soundToggleBtn) soundToggleBtn.addEventListener('click', toggleSound);
   if (themeCycleBtn) themeCycleBtn.addEventListener('click', cycleTheme);
   if (recordsBtn) recordsBtn.addEventListener('click', showRecordsModal);
+  document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
   if (themeSelect) {
     themeSelect.addEventListener('change', () => {
       applyTheme(themeSelect.value, true);
