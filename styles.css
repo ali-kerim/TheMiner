@@ -59,11 +59,16 @@ body[data-theme="medieval"]{
 }
 
 *{box-sizing:border-box}
+
+/* Prevent text selection and long-press callouts across the game UI,
+   while keeping dedicated input fields free for normal editing. */
 html,body{
   height:100%;
   user-select:none;
   -webkit-user-select:none;
   -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
 }
 [hidden]{
   display:none !important;
@@ -80,6 +85,33 @@ canvas{
   user-select:none;
   -webkit-user-select:none;
   -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+
+button,
+select,
+label,
+.app,
+.menuScreen,
+.gameScreen,
+.menuCard,
+.topbar,
+.panel,
+.controls,
+.stage,
+.counter,
+.hint,
+.hintText,
+.modal,
+.modalCard,
+.rotateNotice,
+.field,
+.menuField{
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;
 }
 
 .languageToggle{
