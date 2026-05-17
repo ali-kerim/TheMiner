@@ -1287,55 +1287,27 @@
     }, 1800);
   }
 
-  function findReviveTargetIndex(explodedIndex) {
-    const remote = [];
-    const fallback = [];
-
-    for (let y = 0; y < state.h; y++) {
-      for (let x = 0; x < state.w; x++) {
-        const i = idx(x, y);
-        const cell = state.grid[i];
-        if (i === explodedIndex || cell.mine || cell.revealed || cell.flagged) continue;
-
-        let touchesRevealed = false;
-        neighbors(x, y, (nx, ny) => {
-          if (state.grid[idx(nx, ny)].revealed) touchesRevealed = true;
-        });
-
-        (touchesRevealed ? fallback : remote).push(i);
-      }
-    }
-
-    const pool = remote.length ? remote : fallback;
-    if (!pool.length) return -1;
-    return pool[(Math.random() * pool.length) | 0];
-  }
-
   function reviveAfterLoss() {
     const explodedIndex = state.grid.findIndex((cell) => cell.exploded);
     if (explodedIndex < 0) return false;
 
-    const targetIndex = findReviveTargetIndex(explodedIndex);
-    if (targetIndex < 0) return false;
-
-    const explodedX = explodedIndex % state.w;
-    const explodedY = Math.floor(explodedIndex / state.w);
     const explodedCell = state.grid[explodedIndex];
-    const targetCell = state.grid[targetIndex];
 
-    explodedCell.mine = false;
-    explodedCell.exploded = false;
-    explodedCell.revealed = true;
-    targetCell.mine = true;
-
+    // Rewarded continue must preserve the exact field layout.
+    // The detonated mine stays in place and becomes a visible "flag + mine" marker.
     for (const cell of state.grid) {
       if (cell.mine) {
         cell.revealed = false;
         cell.exploded = false;
       }
     }
-
-    computeNumbers();
+    explodedCell.revealed = false;
+    explodedCell.exploded = true;
+    if (!explodedCell.flagged) {
+      explodedCell.flagged = true;
+      state.flags++;
+    }
+    state.revealed = Math.max(0, state.revealed - 1);
 
     state.over = false;
     state.won = false;
@@ -1347,7 +1319,6 @@
     state.boom = null;
     hideLossModal();
     setFace('🙂');
-    if (explodedCell.n === 0) floodFillZeros(explodedX, explodedY);
     updateCounters();
     draw();
     startTimer();
@@ -2193,6 +2164,8 @@
       ctx.fillRect(px, py + s - border, s, border);
       ctx.fillRect(px + s - border, py, border, s);
 
+      // After rewarded continue, the failed cell stays closed and receives
+      // only an automatic flag, without exposing the mine visually.
       if (c.flagged) drawFlag(px, py, s);
       return;
     }
