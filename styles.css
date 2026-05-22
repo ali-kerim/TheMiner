@@ -507,6 +507,14 @@ body.needsLandscape .rotateNotice{
   border-radius:12px;
   background:linear-gradient(180deg, rgba(110,168,254,.24), rgba(110,168,254,.08));
 }
+.hintIcons{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:3px;
+  width:100%;
+  height:100%;
+}
 .hintAction:hover{
   border-color:rgba(110,168,254,.45);
 }
@@ -520,16 +528,24 @@ body.needsLandscape .rotateNotice{
   cursor:default;
 }
 .hintIcon{
-  width:24px;
-  height:24px;
+  width:18px;
+  height:18px;
   display:block;
-  margin:auto;
   fill:none;
   stroke:#ffe38a;
   stroke-width:1.8;
   stroke-linecap:round;
   stroke-linejoin:round;
   filter:drop-shadow(0 0 8px rgba(255,227,138,.24));
+}
+.hintIconBulb{
+  flex:0 0 auto;
+}
+.hintIconAd{
+  flex:0 0 auto;
+  stroke:#8fe6ff;
+  fill:rgba(121,242,255,.14);
+  filter:drop-shadow(0 0 6px rgba(121,242,255,.22));
 }
 .hintText{
   max-width:160px;
@@ -707,7 +723,7 @@ kbd{
   font-weight:800;
 }
 .iconBtn{
-  width:36px;
+  width:48px;
   height:36px;
   border-radius:10px;
   border:1px solid rgba(255,255,255,.12);
@@ -843,6 +859,10 @@ kbd{
 }
 
 @media (pointer: coarse) and (max-width: 900px){
+  .iconBtn{
+    width:48px;
+  }
+
   .app{
     padding:max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
     gap:6px;
@@ -944,6 +964,14 @@ kbd{
   .hintIcon{
     width:18px;
     height:18px;
+  }
+
+  .hintIconAd{
+    stroke-width:1.7;
+  }
+
+  .hintIcons{
+    gap:2px;
   }
 
   .controls{
@@ -1135,6 +1163,10 @@ body.isMobileDevice .rotateNoticeText{
   font-size:12px;
 }
 
+body.isMobileDevice .iconBtn{
+  width:48px;
+}
+
 body.isMobileLandscape .gameScreen{
   gap:4px;
 }
@@ -1195,7 +1227,7 @@ body.isMobileLandscape .counter{
 
 body.isMobileLandscape .face,
 body.isMobileLandscape .hintAction{
-  width:34px;
+  width:48px;
   height:34px;
   border-radius:9px;
 }
@@ -1205,8 +1237,29 @@ body.isMobileLandscape .face{
 }
 
 body.isMobileLandscape .hintIcon{
-  width:17px;
-  height:17px;
+  width:18px;
+  height:18px;
+}
+
+body.isMobileLandscape .hintIconAd{
+  stroke-width:1.8;
+}
+
+body.isMobileLandscape .hintIcons{
+  gap:2px;
+}
+
+body.isShortViewport .hintIcon{
+  width:18px;
+  height:18px;
+}
+
+body.isShortViewport .hintIconAd{
+  stroke-width:1.75;
+}
+
+body.isShortViewport .hintIcons{
+  gap:2px;
 }
 
 body.isMobileLandscape .controls{

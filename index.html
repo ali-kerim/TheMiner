@@ -67,11 +67,17 @@
         <header class="topbar">
           <div class="hintControl">
             <button class="iconBtn hintAction" id="hintBtn" type="button" aria-label="Подсказка" title="Посмотрите рекламу и выберите закрытую клетку для подсказки">
-              <svg viewBox="0 0 24 24" class="hintIcon" aria-hidden="true">
-                <path d="M9 18h6" />
-                <path d="M10 21h4" />
-                <path d="M12 3a6 6 0 0 0-3.9 10.56c.52.46.9.93 1.14 1.44h5.52c.24-.51.62-.98 1.14-1.44A6 6 0 0 0 12 3Z" />
-              </svg>
+              <span class="hintIcons" aria-hidden="true">
+                <svg viewBox="0 0 24 24" class="hintIcon hintIconBulb">
+                  <path d="M9 18h6" />
+                  <path d="M10 21h4" />
+                  <path d="M12 3a6 6 0 0 0-3.9 10.56c.52.46.9.93 1.14 1.44h5.52c.24-.51.62-.98 1.14-1.44A6 6 0 0 0 12 3Z" />
+                </svg>
+                <svg viewBox="0 0 24 24" class="hintIcon hintIconAd">
+                  <rect x="4" y="7" width="13" height="10" rx="2" />
+                  <path d="M17 10 21 8v8l-4-2" />
+                </svg>
+              </span>
             </button>
             <button id="themeCycleBtn" class="btn themeBtn" type="button" aria-label="Change theme" title="Change theme">Nordic</button>
             <div id="hintInfoPopup" class="hintInfoPopup" hidden role="dialog" aria-live="polite" aria-label="Подсказка">
