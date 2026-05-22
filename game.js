@@ -75,6 +75,10 @@
     75: new Audio('./assets/sounds/perfect.mpeg'),
     90: new Audio('./assets/sounds/sneaky.mpeg'),
   };
+  const managedSfx = [
+    ...Object.values(outcomeSounds),
+    ...Object.values(milestoneSounds),
+  ];
   const MILESTONE_SEQUENCE = [
     { threshold: 0.25, key: 25 },
     { threshold: 0.50, key: 50 },
@@ -93,6 +97,8 @@
   let musicPauseOffset = 0;
   let musicLoadToken = 0;
   let currentMusicThemeCacheKey = '';
+  let iosAudioUnlockAttempted = false;
+  let iosAudioUnlockPromise = null;
   // Remembers whether the current background track was actually playing
   // before the tab became hidden, so we do not auto-enable music on return.
   let musicWasPlayingBeforeHide = false;
@@ -1575,6 +1581,54 @@
     });
   }
 
+  function primeHtmlAudioElement(audio) {
+    if (!(audio instanceof HTMLMediaElement)) return Promise.resolve();
+    const previousMuted = audio.muted;
+    const previousTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+    audio.muted = true;
+    try {
+      audio.currentTime = 0;
+    } catch {}
+
+    let playResult = null;
+    try {
+      playResult = audio.play();
+    } catch (err) {
+      audio.muted = previousMuted;
+      try {
+        audio.currentTime = previousTime;
+      } catch {}
+      return Promise.resolve();
+    }
+
+    return Promise.resolve(playResult)
+      .catch(() => {})
+      .then(() => {
+        audio.pause();
+        try {
+          audio.currentTime = 0;
+        } catch {}
+        audio.muted = previousMuted;
+      });
+  }
+
+  function unlockIosAudio() {
+    if (!isIosSafari()) return Promise.resolve();
+    if (iosAudioUnlockPromise) return iosAudioUnlockPromise;
+
+    iosAudioUnlockAttempted = true;
+    iosAudioUnlockPromise = resumeMusicAudioContext()
+      .then(() => Promise.all(managedSfx.map((audio) => primeHtmlAudioElement(audio))))
+      .catch((err) => {
+        console.warn('iOS audio unlock failed', err);
+      })
+      .then(() => {
+        iosAudioUnlockPromise = null;
+      });
+
+    return iosAudioUnlockPromise;
+  }
+
   function decodeAudioDataCompat(audioContext, arrayBuffer) {
     const copy = arrayBuffer.slice(0);
     try {
@@ -1807,6 +1861,18 @@
     stopMusic();
     if (!musicEnabled) return;
     void playMusic();
+  }
+
+  function installIosAudioUnlockHandlers() {
+    if (!isIosSafari() || iosAudioUnlockAttempted) return;
+
+    const unlockOnce = () => {
+      if (iosAudioUnlockAttempted) return;
+      void unlockIosAudio();
+    };
+
+    document.addEventListener('touchstart', unlockOnce, { passive: true, capture: true, once: true });
+    document.addEventListener('pointerdown', unlockOnce, { passive: true, capture: true, once: true });
   }
 
   function startTimer() {
@@ -2923,6 +2989,7 @@
 
   updateCustomVisibility();
   syncMobileViewportState();
+  installIosAudioUnlockHandlers();
   syncSoundVolumes();
   applyTheme(currentThemeKey);
   // Apply a fallback language immediately, then let SDK startup auto-detection
