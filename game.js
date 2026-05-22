@@ -118,6 +118,9 @@
     loadingReadySent: false,
     adShowing: false,
     gameplayActive: false,
+    audioPausedForAd: false,
+    musicWasPlayingBeforeAd: false,
+    audioContextSuspendedForAd: false,
   };
   const LOSS_CONTINUE_LABEL = 'Продолжить за рекламу';
 
@@ -498,13 +501,17 @@
 
       const finishAd = () => {
         yandex.adShowing = false;
+        resumeAudioAfterAd();
         startGameplayMarkup();
       };
 
       try {
         ysdk.adv.showFullscreenAdv({
           callbacks: {
-            onOpen: stopGameplayMarkup,
+            onOpen: () => {
+              stopGameplayMarkup();
+              void pauseAudioForAd();
+            },
             onClose: finishAd,
             onError: (err) => {
               console.warn('Yandex fullscreen ad failed', err);
@@ -534,12 +541,14 @@
         if (settled) return;
         settled = true;
         yandex.adShowing = false;
+        resumeAudioAfterAd();
         startGameplayMarkup();
         resolve(result);
       };
 
       stopGameplayMarkup();
       yandex.adShowing = true;
+      void pauseAudioForAd();
 
       try {
         ysdk.adv.showRewardedVideo({
@@ -582,18 +591,21 @@
         if (settled) return;
         settled = true;
         yandex.adShowing = false;
+        resumeAudioAfterAd();
         startGameplayMarkup();
         resolve(result);
       };
 
       stopGameplayMarkup();
       yandex.adShowing = true;
+      void pauseAudioForAd();
 
       try {
         ysdk.adv.showRewardedVideo({
           callbacks: {
             onOpen: () => {
               stopGameplayMarkup();
+              void pauseAudioForAd();
             },
             onRewarded: () => {
               rewarded = true;
@@ -1482,7 +1494,7 @@
   }
 
   function playMilestoneVoice(milestoneKey) {
-    if (!soundEnabled) return;
+    if (!soundEnabled || isAdAudioBlocked()) return;
     const sound = milestoneSounds[milestoneKey];
     if (!sound) return;
     Object.values(milestoneSounds).forEach((entry) => {
@@ -1549,7 +1561,7 @@
   }
 
   function playOutcomeSound(type) {
-    if (!soundEnabled) return;
+    if (!soundEnabled || isAdAudioBlocked()) return;
     const sound = outcomeSounds[type];
     if (!sound) return;
     stopOutcomeSounds();
@@ -1788,8 +1800,58 @@
     teardownMusicSource(true);
   }
 
+  function suspendMusicAudioContext() {
+    if (!musicAudioContext || musicAudioContext.state !== 'running') return Promise.resolve(false);
+    return musicAudioContext.suspend()
+      .then(() => true)
+      .catch((err) => {
+        console.warn('Music audio context suspend failed', err);
+        return false;
+      });
+  }
+
+  function isAdAudioBlocked() {
+    return yandex.adShowing || yandex.audioPausedForAd;
+  }
+
+  function pauseAudioForAd() {
+    if (yandex.audioPausedForAd) return Promise.resolve();
+
+    yandex.audioPausedForAd = true;
+    yandex.musicWasPlayingBeforeAd = Boolean(musicSourceNode && musicEnabled && musicPlaybackActive);
+    stopOutcomeSounds();
+
+    if (yandex.musicWasPlayingBeforeAd) {
+      pauseMusic();
+    } else {
+      musicPlaybackActive = false;
+    }
+
+    return suspendMusicAudioContext().then((suspended) => {
+      yandex.audioContextSuspendedForAd = suspended;
+    });
+  }
+
+  function resumeAudioAfterAd() {
+    if (!yandex.audioPausedForAd) return;
+
+    const shouldResumeMusic = yandex.musicWasPlayingBeforeAd && musicEnabled && state.screen === 'game' && !state.over;
+    yandex.audioPausedForAd = false;
+    yandex.musicWasPlayingBeforeAd = false;
+    yandex.audioContextSuspendedForAd = false;
+
+    if (shouldResumeMusic) {
+      void playMusic();
+      return;
+    }
+
+    if (!musicEnabled || state.screen !== 'game' || state.over) {
+      stopMusic();
+    }
+  }
+
   async function playMusic() {
-    if (!musicEnabled || state.over || state.screen !== 'game') return;
+    if (!musicEnabled || state.over || state.screen !== 'game' || isAdAudioBlocked()) return;
 
     musicPlaybackActive = true;
     const playbackToken = ++musicLoadToken;
@@ -1843,6 +1905,11 @@
       if (musicWasPlayingBeforeHide) {
         pauseMusic();
       }
+      return;
+    }
+
+    if (isAdAudioBlocked()) {
+      musicWasPlayingBeforeHide = false;
       return;
     }
 
