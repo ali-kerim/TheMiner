@@ -381,8 +381,23 @@
     return (coarse || hasTouch || shortLandscapeViewport) && (narrowViewport || shortLandscapeViewport);
   }
 
+  function isIosSafari() {
+    const ua = navigator.userAgent || '';
+    const platform = navigator.platform || '';
+    const touchMac = platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    const iosDevice = /iPad|iPhone|iPod/.test(ua) || touchMac;
+    const webkit = /WebKit/i.test(ua);
+    const otherIosBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/i.test(ua);
+    return iosDevice && webkit && !otherIosBrowser;
+  }
+
   function needsLandscapeMode() {
     return isMobileDevice() && window.innerHeight > window.innerWidth;
+  }
+
+  function syncViewportCssVars() {
+    const viewportHeight = window.visualViewport?.height || window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', `${Math.round(viewportHeight)}px`);
   }
 
   function syncMobileViewportState() {
@@ -390,11 +405,14 @@
     const needsLandscape = needsLandscapeMode();
     const mobileLandscape = mobile && window.innerWidth > window.innerHeight;
     const shortViewport = mobile && window.innerHeight <= 500;
+    const iosSafari = isIosSafari();
     document.body.classList.toggle('isMobileDevice', mobile);
+    document.body.classList.toggle('isIosSafari', iosSafari);
     document.body.classList.toggle('needsLandscape', needsLandscape);
     document.body.classList.toggle('isMobileLandscape', mobileLandscape);
     document.body.classList.toggle('isShortViewport', shortViewport);
     if (rotateNotice) rotateNotice.setAttribute('aria-hidden', needsLandscape ? 'false' : 'true');
+    syncViewportCssVars();
   }
 
   async function tryLockLandscape() {
@@ -2547,6 +2565,19 @@
     draw();
   });
 
+  if (gameScreen) {
+    // CSS overscroll-behavior handles modern browsers, but mobile Safari and
+    // some Android WebViews can still expose page dragging or pull-to-refresh.
+    // Prevent touch scrolling only inside active gameplay so menu scrolling
+    // and form controls remain available.
+    gameScreen.addEventListener('touchmove', (e) => {
+      if (state.screen !== 'game' || gameScreen.hidden) return;
+      if (!(e.target instanceof Node) || !gameScreen.contains(e.target)) return;
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+    }, { passive: false });
+  }
+
   function clearLongPress() {
     if (state.longPressId != null) {
       clearTimeout(state.longPressId);
@@ -2877,6 +2908,18 @@
     resize();
     draw();
   });
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      syncMobileViewportState();
+      if (state.screen !== 'game') return;
+      resize();
+      draw();
+    });
+    window.visualViewport.addEventListener('scroll', () => {
+      syncViewportCssVars();
+    });
+  }
 
   updateCustomVisibility();
   syncMobileViewportState();
