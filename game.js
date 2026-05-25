@@ -105,8 +105,6 @@
   let musicAudioContext = null;
   let musicGainNode = null;
   let musicSourceNode = null;
-  let musicHtmlElement = null;
-  let musicHtmlSourceKey = '';
   let musicSourceStartedAt = 0;
   let musicPauseOffset = 0;
   let musicLoadToken = 0;
@@ -412,10 +410,6 @@
     const webkit = /WebKit/i.test(ua);
     const otherIosBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/i.test(ua);
     return iosDevice && webkit && !otherIosBrowser;
-  }
-
-  function usesHtmlMusicFallback() {
-    return isIosSafari();
   }
 
   function needsLandscapeMode() {
@@ -1045,6 +1039,7 @@
       stopGameMusic();
       return;
     }
+    prepareIosAudioForPlayback();
     if (state.screen === 'game' && !state.over) {
       startGameMusic();
     }
@@ -1608,29 +1603,7 @@
     return musicAudioContext;
   }
 
-  function ensureMusicHtmlElement() {
-    if (musicHtmlElement) return musicHtmlElement;
-
-    const audio = new Audio();
-    audio.preload = 'auto';
-    audio.volume = MUSIC_VOLUME;
-    audio.playsInline = true;
-    audio.setAttribute('playsinline', '');
-    audio.addEventListener('ended', () => {
-      if (!musicPlaybackActive || !musicEnabled || state.over || state.screen !== 'game' || isAdAudioBlocked()) return;
-      const musicFiles = activeTheme().musicFiles;
-      currentMusicIndex = pickNextMusicIndex(musicFiles);
-      musicPauseOffset = 0;
-      void playMusic();
-    });
-    musicHtmlElement = audio;
-    return musicHtmlElement;
-  }
-
   function isMusicActuallyPlaying() {
-    if (usesHtmlMusicFallback()) {
-      return Boolean(musicHtmlElement && !musicHtmlElement.paused && !musicHtmlElement.ended);
-    }
     return Boolean(musicSourceNode);
   }
 
@@ -1690,6 +1663,11 @@
       });
 
     return iosAudioUnlockPromise;
+  }
+
+  function prepareIosAudioForPlayback() {
+    if (!isIosSafari()) return;
+    void unlockIosAudio();
   }
 
   function decodeAudioDataCompat(audioContext, arrayBuffer) {
@@ -1827,12 +1805,6 @@
   function configureMusicTracks() {
     const shouldResume = musicPlaybackActive;
     musicLoadToken++;
-    if (usesHtmlMusicFallback() && musicHtmlElement) {
-      musicHtmlElement.pause();
-      musicHtmlElement.removeAttribute('src');
-      musicHtmlElement.load();
-      musicHtmlSourceKey = '';
-    }
     teardownMusicSource(false);
     musicBuffers = [];
     currentMusicThemeCacheKey = '';
@@ -1848,29 +1820,12 @@
     musicLoadToken++;
     musicPlaybackActive = false;
     musicWasPlayingBeforeHide = false;
-    if (musicHtmlElement) {
-      musicHtmlElement.pause();
-      try {
-        musicHtmlElement.currentTime = 0;
-      } catch {}
-    }
-    musicHtmlSourceKey = '';
-    musicPauseOffset = 0;
     teardownMusicSource(false);
     currentMusicIndex = -1;
   }
 
   function pauseMusic() {
     musicLoadToken++;
-    if (usesHtmlMusicFallback() && musicHtmlElement) {
-      try {
-        musicPauseOffset = Number.isFinite(musicHtmlElement.currentTime) ? musicHtmlElement.currentTime : 0;
-      } catch {
-        musicPauseOffset = 0;
-      }
-      musicHtmlElement.pause();
-      return;
-    }
     teardownMusicSource(true);
   }
 
@@ -1929,40 +1884,6 @@
 
     musicPlaybackActive = true;
     const playbackToken = ++musicLoadToken;
-
-    if (usesHtmlMusicFallback()) {
-      const musicFiles = activeTheme().musicFiles;
-      if (!musicFiles.length) return;
-      if (currentMusicIndex < 0 || !musicFiles[currentMusicIndex]) {
-        currentMusicIndex = pickNextMusicIndex(musicFiles);
-        musicPauseOffset = 0;
-      }
-
-      const audio = ensureMusicHtmlElement();
-      const nextSrc = musicFiles[currentMusicIndex];
-      if (!nextSrc) return;
-
-      if (musicHtmlSourceKey !== nextSrc) {
-        audio.src = nextSrc;
-        audio.load();
-        musicHtmlSourceKey = nextSrc;
-      }
-
-      audio.volume = MUSIC_VOLUME;
-      try {
-        if (musicPauseOffset > 0) {
-          audio.currentTime = musicPauseOffset;
-        }
-      } catch {}
-
-      try {
-        await audio.play();
-      } catch (err) {
-        console.warn('iPhone background music playback failed', err);
-      }
-      return;
-    }
-
     const audioContext = await resumeMusicAudioContext();
     if (!audioContext) return;
 
@@ -2276,6 +2197,7 @@
 
   function startSelectedGame() {
     const selection = getSelection();
+    prepareIosAudioForPlayback();
     showGame();
     newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset);
   }
