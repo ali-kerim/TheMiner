@@ -105,6 +105,8 @@
   let musicAudioContext = null;
   let musicGainNode = null;
   let musicSourceNode = null;
+  let musicHtmlElement = null;
+  let musicHtmlSourceKey = '';
   let musicSourceStartedAt = 0;
   let musicPauseOffset = 0;
   let musicLoadToken = 0;
@@ -410,6 +412,10 @@
     const webkit = /WebKit/i.test(ua);
     const otherIosBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/i.test(ua);
     return iosDevice && webkit && !otherIosBrowser;
+  }
+
+  function usesHtmlMusicFallback() {
+    return isIosSafari();
   }
 
   function needsLandscapeMode() {
@@ -1602,6 +1608,32 @@
     return musicAudioContext;
   }
 
+  function ensureMusicHtmlElement() {
+    if (musicHtmlElement) return musicHtmlElement;
+
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.volume = MUSIC_VOLUME;
+    audio.playsInline = true;
+    audio.setAttribute('playsinline', '');
+    audio.addEventListener('ended', () => {
+      if (!musicPlaybackActive || !musicEnabled || state.over || state.screen !== 'game' || isAdAudioBlocked()) return;
+      const musicFiles = activeTheme().musicFiles;
+      currentMusicIndex = pickNextMusicIndex(musicFiles);
+      musicPauseOffset = 0;
+      void playMusic();
+    });
+    musicHtmlElement = audio;
+    return musicHtmlElement;
+  }
+
+  function isMusicActuallyPlaying() {
+    if (usesHtmlMusicFallback()) {
+      return Boolean(musicHtmlElement && !musicHtmlElement.paused && !musicHtmlElement.ended);
+    }
+    return Boolean(musicSourceNode);
+  }
+
   function resumeMusicAudioContext() {
     const audioContext = ensureMusicAudioContext();
     if (!audioContext) return Promise.resolve(null);
@@ -1795,6 +1827,12 @@
   function configureMusicTracks() {
     const shouldResume = musicPlaybackActive;
     musicLoadToken++;
+    if (usesHtmlMusicFallback() && musicHtmlElement) {
+      musicHtmlElement.pause();
+      musicHtmlElement.removeAttribute('src');
+      musicHtmlElement.load();
+      musicHtmlSourceKey = '';
+    }
     teardownMusicSource(false);
     musicBuffers = [];
     currentMusicThemeCacheKey = '';
@@ -1810,12 +1848,29 @@
     musicLoadToken++;
     musicPlaybackActive = false;
     musicWasPlayingBeforeHide = false;
+    if (musicHtmlElement) {
+      musicHtmlElement.pause();
+      try {
+        musicHtmlElement.currentTime = 0;
+      } catch {}
+    }
+    musicHtmlSourceKey = '';
+    musicPauseOffset = 0;
     teardownMusicSource(false);
     currentMusicIndex = -1;
   }
 
   function pauseMusic() {
     musicLoadToken++;
+    if (usesHtmlMusicFallback() && musicHtmlElement) {
+      try {
+        musicPauseOffset = Number.isFinite(musicHtmlElement.currentTime) ? musicHtmlElement.currentTime : 0;
+      } catch {
+        musicPauseOffset = 0;
+      }
+      musicHtmlElement.pause();
+      return;
+    }
     teardownMusicSource(true);
   }
 
@@ -1837,7 +1892,7 @@
     if (yandex.audioPausedForAd) return Promise.resolve();
 
     yandex.audioPausedForAd = true;
-    yandex.musicWasPlayingBeforeAd = Boolean(musicSourceNode && musicEnabled && musicPlaybackActive);
+    yandex.musicWasPlayingBeforeAd = Boolean(isMusicActuallyPlaying() && musicEnabled && musicPlaybackActive);
     stopOutcomeSounds();
 
     if (yandex.musicWasPlayingBeforeAd) {
@@ -1874,6 +1929,40 @@
 
     musicPlaybackActive = true;
     const playbackToken = ++musicLoadToken;
+
+    if (usesHtmlMusicFallback()) {
+      const musicFiles = activeTheme().musicFiles;
+      if (!musicFiles.length) return;
+      if (currentMusicIndex < 0 || !musicFiles[currentMusicIndex]) {
+        currentMusicIndex = pickNextMusicIndex(musicFiles);
+        musicPauseOffset = 0;
+      }
+
+      const audio = ensureMusicHtmlElement();
+      const nextSrc = musicFiles[currentMusicIndex];
+      if (!nextSrc) return;
+
+      if (musicHtmlSourceKey !== nextSrc) {
+        audio.src = nextSrc;
+        audio.load();
+        musicHtmlSourceKey = nextSrc;
+      }
+
+      audio.volume = MUSIC_VOLUME;
+      try {
+        if (musicPauseOffset > 0) {
+          audio.currentTime = musicPauseOffset;
+        }
+      } catch {}
+
+      try {
+        await audio.play();
+      } catch (err) {
+        console.warn('iPhone background music playback failed', err);
+      }
+      return;
+    }
+
     const audioContext = await resumeMusicAudioContext();
     if (!audioContext) return;
 
@@ -1920,7 +2009,7 @@
   function handleDocumentVisibilityChange() {
     if (document.hidden) {
       // Pause only if music was really playing before hiding the tab.
-      musicWasPlayingBeforeHide = Boolean(musicSourceNode && musicEnabled && musicPlaybackActive);
+      musicWasPlayingBeforeHide = Boolean(isMusicActuallyPlaying() && musicEnabled && musicPlaybackActive);
       if (musicWasPlayingBeforeHide) {
         pauseMusic();
       }
