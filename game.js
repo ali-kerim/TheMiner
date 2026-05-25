@@ -56,8 +56,8 @@
   const ctx = canvas.getContext('2d', { alpha: false });
   const resultsEndpoint = String(window.SAPER_RESULTS_URL || '').trim();
   const outcomeSounds = {
-    defeat: new Audio('./assets/sounds/defeat.mpeg'),
-    victory: new Audio('./assets/sounds/game-won.mp3'),
+    defeat: './assets/sounds/defeat.mpeg',
+    victory: './assets/sounds/game-won.mp3',
   };
   const mineImages = {
     medieval: loadImage('./assets/powder.png'),
@@ -82,15 +82,11 @@
     },
   };
   const milestoneSounds = {
-    25: new Audio('./assets/sounds/hmm.mpeg'),
-    50: new Audio('./assets/sounds/letsgo.mpeg'),
-    75: new Audio('./assets/sounds/perfect.mpeg'),
-    90: new Audio('./assets/sounds/sneaky.mpeg'),
+    25: './assets/sounds/hmm.mpeg',
+    50: './assets/sounds/letsgo.mpeg',
+    75: './assets/sounds/perfect.mpeg',
+    90: './assets/sounds/sneaky.mpeg',
   };
-  const managedSfx = [
-    ...Object.values(outcomeSounds),
-    ...Object.values(milestoneSounds),
-  ];
   const MILESTONE_SEQUENCE = [
     { threshold: 0.25, key: 25 },
     { threshold: 0.50, key: 50 },
@@ -104,11 +100,15 @@
   let musicPlaybackActive = false;
   let musicAudioContext = null;
   let musicGainNode = null;
+  let sfxGainNode = null;
   let musicSourceNode = null;
+  let activeMilestoneSourceNode = null;
+  let activeOutcomeSourceNode = null;
   let musicSourceStartedAt = 0;
   let musicPauseOffset = 0;
   let musicLoadToken = 0;
   let currentMusicThemeCacheKey = '';
+  const sfxBufferCache = new Map();
   let iosAudioUnlockAttempted = false;
   let iosAudioUnlockPromise = null;
   // Remembers whether the current background track was actually playing
@@ -1481,22 +1481,13 @@
   }
 
   function stopOutcomeSounds() {
-    Object.values(outcomeSounds).forEach((sound) => {
-      sound.pause();
-      sound.currentTime = 0;
-    });
-    Object.values(milestoneSounds).forEach((sound) => {
-      sound.pause();
-      sound.currentTime = 0;
-    });
+    stopSfxSource('outcome');
+    stopSfxSource('milestone');
   }
 
   function syncSoundVolumes() {
-    outcomeSounds.defeat.volume = soundEnabled ? SOUND_VOLUMES.defeat : 0;
-    outcomeSounds.victory.volume = soundEnabled ? SOUND_VOLUMES.victory : 0;
-    Object.values(milestoneSounds).forEach((sound) => {
-      sound.volume = soundEnabled ? 1 : 0;
-    });
+    // Sound effects use Web Audio gain at playback time, so there is no
+    // persistent HTMLMediaElement volume state to synchronize.
   }
 
   function hideMilestonePopup() {
@@ -1517,13 +1508,8 @@
     if (!soundEnabled || isAdAudioBlocked()) return;
     const sound = milestoneSounds[milestoneKey];
     if (!sound) return;
-    Object.values(milestoneSounds).forEach((entry) => {
-      entry.pause();
-      entry.currentTime = 0;
-    });
-    sound.play().catch((err) => {
-      console.warn('Milestone voice playback failed', err);
-    });
+    stopSfxSource('milestone');
+    void playBufferedSound(sound, 1, 'milestone', 'Milestone voice playback failed');
   }
 
   function processMilestoneQueue() {
@@ -1585,10 +1571,7 @@
     const sound = outcomeSounds[type];
     if (!sound) return;
     stopOutcomeSounds();
-    sound.currentTime = 0;
-    sound.play().catch((err) => {
-      console.warn('Outcome sound playback failed', err);
-    });
+    void playBufferedSound(sound, SOUND_VOLUMES[type] || 1, 'outcome', 'Outcome sound playback failed');
   }
 
   function ensureMusicAudioContext() {
@@ -1600,7 +1583,26 @@
     musicGainNode = musicAudioContext.createGain();
     musicGainNode.gain.value = MUSIC_VOLUME;
     musicGainNode.connect(musicAudioContext.destination);
+    sfxGainNode = musicAudioContext.createGain();
+    sfxGainNode.gain.value = 1;
+    sfxGainNode.connect(musicAudioContext.destination);
     return musicAudioContext;
+  }
+
+  function stopSfxSource(channel) {
+    const sourceNode = channel === 'milestone' ? activeMilestoneSourceNode : activeOutcomeSourceNode;
+    if (!sourceNode) return;
+
+    if (channel === 'milestone') {
+      activeMilestoneSourceNode = null;
+    } else {
+      activeOutcomeSourceNode = null;
+    }
+
+    try {
+      sourceNode.stop();
+    } catch {}
+    sourceNode.disconnect();
   }
 
   function isMusicActuallyPlaying() {
@@ -1617,35 +1619,41 @@
     });
   }
 
-  function primeHtmlAudioElement(audio) {
-    if (!(audio instanceof HTMLMediaElement)) return Promise.resolve();
-    const previousMuted = audio.muted;
-    const previousTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
-    audio.muted = true;
+  function clearBrowserMediaSession() {
+    const mediaSession = navigator.mediaSession;
+    if (!mediaSession) return;
+
     try {
-      audio.currentTime = 0;
+      mediaSession.metadata = null;
     } catch {}
 
-    let playResult = null;
     try {
-      playResult = audio.play();
-    } catch (err) {
-      audio.muted = previousMuted;
-      try {
-        audio.currentTime = previousTime;
-      } catch {}
-      return Promise.resolve();
-    }
+      mediaSession.playbackState = 'none';
+    } catch {}
 
-    return Promise.resolve(playResult)
-      .catch(() => {})
-      .then(() => {
-        audio.pause();
-        try {
-          audio.currentTime = 0;
-        } catch {}
-        audio.muted = previousMuted;
-      });
+    ['play', 'pause', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward', 'seekto', 'stop'].forEach((action) => {
+      try {
+        mediaSession.setActionHandler(action, null);
+      } catch {}
+    });
+  }
+
+  function primeMusicAudioContext(audioContext) {
+    if (!audioContext) return Promise.resolve();
+
+    try {
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0;
+      gainNode.connect(audioContext.destination);
+
+      const sourceNode = audioContext.createBufferSource();
+      sourceNode.buffer = audioContext.createBuffer(1, 1, 22050);
+      sourceNode.connect(gainNode);
+      sourceNode.start(0);
+      sourceNode.stop(audioContext.currentTime + 0.001);
+    } catch {}
+
+    return Promise.resolve();
   }
 
   function unlockIosAudio() {
@@ -1654,7 +1662,10 @@
 
     iosAudioUnlockAttempted = true;
     iosAudioUnlockPromise = resumeMusicAudioContext()
-      .then(() => Promise.all(managedSfx.map((audio) => primeHtmlAudioElement(audio))))
+      .then((audioContext) => primeMusicAudioContext(audioContext))
+      .then(() => {
+        clearBrowserMediaSession();
+      })
       .catch((err) => {
         console.warn('iOS audio unlock failed', err);
       })
@@ -1688,6 +1699,81 @@
 
   function createMusicThemeCacheKey() {
     return `${currentThemeKey}:${activeTheme().musicFiles.join('|')}`;
+  }
+
+  async function loadSharedAudioBuffer(src) {
+    const audioContext = ensureMusicAudioContext();
+    if (!audioContext) return null;
+
+    let bufferPromise = sfxBufferCache.get(src);
+    if (!bufferPromise) {
+      bufferPromise = (async () => {
+        let arrayBuffer = null;
+        try {
+          const response = await fetch(src);
+          if (!response.ok) {
+            throw new Error(`Failed to load audio file: ${src}`);
+          }
+          arrayBuffer = await response.arrayBuffer();
+        } catch (fetchErr) {
+          arrayBuffer = await loadArrayBufferViaXhr(src);
+        }
+
+        return decodeAudioDataCompat(audioContext, arrayBuffer);
+      })();
+      sfxBufferCache.set(src, bufferPromise);
+    }
+
+    try {
+      return await bufferPromise;
+    } catch (err) {
+      sfxBufferCache.delete(src);
+      throw err;
+    }
+  }
+
+  async function playBufferedSound(src, volume = 1, channel = 'outcome', errorLabel = 'Sound playback failed') {
+    if (isIosSafari()) {
+      await unlockIosAudio();
+    }
+
+    const audioContext = await resumeMusicAudioContext();
+    if (!audioContext || !sfxGainNode) return;
+
+    try {
+      const buffer = await loadSharedAudioBuffer(src);
+      if (!buffer) return;
+
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = volume;
+      gainNode.connect(sfxGainNode);
+
+      const sourceNode = audioContext.createBufferSource();
+      sourceNode.buffer = buffer;
+      sourceNode.connect(gainNode);
+
+      if (channel === 'milestone') {
+        activeMilestoneSourceNode = sourceNode;
+      } else {
+        activeOutcomeSourceNode = sourceNode;
+      }
+
+      sourceNode.addEventListener('ended', () => {
+        gainNode.disconnect();
+        if (channel === 'milestone' && activeMilestoneSourceNode === sourceNode) {
+          activeMilestoneSourceNode = null;
+        }
+        if (channel === 'outcome' && activeOutcomeSourceNode === sourceNode) {
+          activeOutcomeSourceNode = null;
+        }
+        sourceNode.disconnect();
+      }, { once: true });
+
+      sourceNode.start(0);
+      clearBrowserMediaSession();
+    } catch (err) {
+      console.warn(errorLabel, err);
+    }
   }
 
   function loadArrayBufferViaXhr(src) {
@@ -1822,11 +1908,13 @@
     musicWasPlayingBeforeHide = false;
     teardownMusicSource(false);
     currentMusicIndex = -1;
+    clearBrowserMediaSession();
   }
 
   function pauseMusic() {
     musicLoadToken++;
     teardownMusicSource(true);
+    clearBrowserMediaSession();
   }
 
   function suspendMusicAudioContext() {
@@ -1882,6 +1970,10 @@
   async function playMusic() {
     if (!musicEnabled || state.over || state.screen !== 'game' || isAdAudioBlocked()) return;
 
+    if (isIosSafari()) {
+      await unlockIosAudio();
+    }
+
     musicPlaybackActive = true;
     const playbackToken = ++musicLoadToken;
     const audioContext = await resumeMusicAudioContext();
@@ -1921,6 +2013,7 @@
     const startOffset = getSafeMusicOffset(currentBuffer, musicPauseOffset);
     musicSourceStartedAt = audioContext.currentTime - startOffset;
     sourceNode.start(0, startOffset);
+    clearBrowserMediaSession();
   }
 
   function stopGameMusic() {
