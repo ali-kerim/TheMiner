@@ -2791,18 +2791,21 @@
         if (settled) return;
         settled = true;
         yandex.adShowing = false;
+        resumeAudioAfterAd();
         startGameplayMarkup();
         resolve(result);
       };
 
       stopGameplayMarkup();
       yandex.adShowing = true;
+      void pauseAudioForAd();
 
       try {
         ysdk.adv.showRewardedVideo({
           callbacks: {
             onOpen: () => {
               stopGameplayMarkup();
+              void pauseAudioForAd();
               setHintText(t('watch_ad_to_end'));
             },
             onRewarded: () => {
