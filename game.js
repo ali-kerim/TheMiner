@@ -64,10 +64,22 @@
     space: loadImage('./assets/black-hole.png'),
   };
   const milestoneImages = {
-    25: loadImage('./assets/troll2_1.png'),
-    50: loadImage('./assets/gj3.png'),
-    75: loadImage('./assets/gj2.png'),
-    90: loadImage('./assets/troll2_2.png'),
+    25: {
+      ru: loadImage('./assets/troll2_1.png'),
+      en: loadImage('./assets/troll2_1_eng.png'),
+    },
+    50: {
+      ru: loadImage('./assets/gj3.png'),
+      en: loadImage('./assets/gj3_eng.png'),
+    },
+    75: {
+      ru: loadImage('./assets/gj2.png'),
+      en: loadImage('./assets/gj2_eng.png'),
+    },
+    90: {
+      ru: loadImage('./assets/troll2_2.png'),
+      en: loadImage('./assets/troll2_2_eng2.png'),
+    },
   };
   const milestoneSounds = {
     25: new Audio('./assets/sounds/hmm.mpeg'),
@@ -441,6 +453,12 @@
       if (state.screen === 'game') draw();
     });
     return img;
+  }
+
+  function getLocalizedMilestoneImage(milestoneKey) {
+    const images = milestoneImages[milestoneKey];
+    if (!images) return null;
+    return currentLanguage === 'en' ? (images.en || images.ru) : (images.ru || images.en);
   }
 
   function notifyGameReady() {
@@ -861,6 +879,7 @@
   function applyLanguageToDom() {
     document.documentElement.lang = t('html_lang');
     document.title = t('app_name');
+    document.body.dataset.lang = currentLanguage;
     const app = document.getElementById('app');
     if (app) app.setAttribute('aria-label', t('app_name'));
     const menuTitle = document.querySelector('.menuTitle');
@@ -1509,7 +1528,7 @@
   function processMilestoneQueue() {
     if (state.milestoneActive || !state.milestoneQueue.length || state.screen !== 'game' || state.over) return;
     const milestoneKey = state.milestoneQueue.shift();
-    const milestoneImage = milestoneImages[milestoneKey];
+    const milestoneImage = getLocalizedMilestoneImage(milestoneKey);
     if (!milestonePopup || !milestonePopupImage || !milestoneImage) return;
 
     syncMilestonePopupLayout();
