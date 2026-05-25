@@ -109,7 +109,7 @@
   let musicLoadToken = 0;
   let currentMusicThemeCacheKey = '';
   const sfxBufferCache = new Map();
-  let iosAudioUnlockAttempted = false;
+  let iosAudioUnlocked = false;
   let iosAudioUnlockPromise = null;
   // Remembers whether the current background track was actually playing
   // before the tab became hidden, so we do not auto-enable music on return.
@@ -1657,20 +1657,30 @@
   }
 
   function unlockIosAudio() {
-    if (!isIosSafari()) return Promise.resolve();
+    if (!isIosSafari()) return Promise.resolve(true);
+    if (iosAudioUnlocked) return Promise.resolve(true);
     if (iosAudioUnlockPromise) return iosAudioUnlockPromise;
 
-    iosAudioUnlockAttempted = true;
     iosAudioUnlockPromise = resumeMusicAudioContext()
-      .then((audioContext) => primeMusicAudioContext(audioContext))
+      .then((audioContext) => {
+        if (!audioContext) return false;
+        return primeMusicAudioContext(audioContext).then(() => audioContext.state === 'running');
+      })
+      .then((unlocked) => {
+        iosAudioUnlocked = Boolean(unlocked);
+        return iosAudioUnlocked;
+      })
       .then(() => {
         clearBrowserMediaSession();
       })
       .catch((err) => {
         console.warn('iOS audio unlock failed', err);
+        return false;
       })
       .then(() => {
+        const unlocked = iosAudioUnlocked;
         iosAudioUnlockPromise = null;
+        return unlocked;
       });
 
     return iosAudioUnlockPromise;
@@ -2053,15 +2063,18 @@
   }
 
   function installIosAudioUnlockHandlers() {
-    if (!isIosSafari() || iosAudioUnlockAttempted) return;
+    if (!isIosSafari()) return;
 
-    const unlockOnce = () => {
-      if (iosAudioUnlockAttempted) return;
-      void unlockIosAudio();
+    const unlockOnGesture = () => {
+      void unlockIosAudio().then((unlocked) => {
+        if (!unlocked) return;
+        document.removeEventListener('touchstart', unlockOnGesture, true);
+        document.removeEventListener('pointerdown', unlockOnGesture, true);
+      });
     };
 
-    document.addEventListener('touchstart', unlockOnce, { passive: true, capture: true, once: true });
-    document.addEventListener('pointerdown', unlockOnce, { passive: true, capture: true, once: true });
+    document.addEventListener('touchstart', unlockOnGesture, { passive: true, capture: true });
+    document.addEventListener('pointerdown', unlockOnGesture, { passive: true, capture: true });
   }
 
   function startTimer() {
