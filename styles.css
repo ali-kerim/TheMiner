@@ -64,19 +64,28 @@ body[data-theme="medieval"]{
 /* Prevent text selection and long-press callouts across the game UI,
    while keeping dedicated input fields free for normal editing. */
 html,body{
+  width:100%;
   height:100%;
+  min-height:100dvh;
+  margin:0;
+  padding:0;
+  overflow:hidden;
   user-select:none;
   -webkit-user-select:none;
   -webkit-touch-callout:none;
   -webkit-tap-highlight-color:transparent;
   touch-action:manipulation;
-  overscroll-behavior-y:none;
+  overscroll-behavior:none;
 }
 [hidden]{
   display:none !important;
 }
 body{
   margin:0;
+  width:100%;
+  height:100%;
+  min-height:100dvh;
+  padding:0;
   font-family:var(--app-font);
   background: radial-gradient(1200px 800px at 20% 0%, #172042 0%, var(--bg0) 45%, #090a0f 100%);
   color:var(--text);
@@ -87,6 +96,7 @@ body.isIosSafari{
   position:fixed;
   inset:0;
   width:100%;
+  min-height:100dvh;
   height:var(--app-height);
   overflow:hidden;
 }
@@ -169,17 +179,23 @@ body[data-theme="medieval"]{
 }
 
 .app{
+  width:100%;
   height:100%;
+  min-height:100dvh;
   min-height:var(--app-height);
   display:flex;
   flex-direction:column;
   padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
   gap:10px;
+  overflow:hidden;
+  overscroll-behavior:none;
 }
 
 body.isIosSafari .app{
   position:fixed;
   inset:0;
+  width:100%;
+  min-height:100dvh;
   height:var(--app-height);
   min-height:var(--app-height);
   overflow:hidden;
@@ -189,6 +205,7 @@ body.isIosSafari .app{
 .gameScreen{
   min-height:0;
   flex:1 1 auto;
+  width:100%;
 }
 
 .menuScreen,
@@ -215,6 +232,8 @@ body.isIosSafari .app{
   gap:10px;
   min-height:0;
   position:relative;
+  overflow:hidden;
+  overscroll-behavior:none;
 }
 
 body.isIosSafari .menuScreen,

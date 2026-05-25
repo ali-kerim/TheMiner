@@ -56,8 +56,8 @@
   const ctx = canvas.getContext('2d', { alpha: false });
   const resultsEndpoint = String(window.SAPER_RESULTS_URL || '').trim();
   const outcomeSounds = {
-    defeat: new Audio('./assets/sounds/defeat.mpeg'),
-    victory: new Audio('./assets/sounds/game-won.mp3'),
+    defeat: './assets/sounds/defeat.mpeg',
+    victory: './assets/sounds/game-won.mp3',
   };
   const mineImages = {
     medieval: loadImage('./assets/powder.png'),
@@ -82,15 +82,11 @@
     },
   };
   const milestoneSounds = {
-    25: new Audio('./assets/sounds/hmm.mpeg'),
-    50: new Audio('./assets/sounds/letsgo.mpeg'),
-    75: new Audio('./assets/sounds/perfect.mpeg'),
-    90: new Audio('./assets/sounds/sneaky.mpeg'),
+    25: './assets/sounds/hmm.mpeg',
+    50: './assets/sounds/letsgo.mpeg',
+    75: './assets/sounds/perfect.mpeg',
+    90: './assets/sounds/sneaky.mpeg',
   };
-  const managedSfx = [
-    ...Object.values(outcomeSounds),
-    ...Object.values(milestoneSounds),
-  ];
   const MILESTONE_SEQUENCE = [
     { threshold: 0.25, key: 25 },
     { threshold: 0.50, key: 50 },
@@ -104,28 +100,39 @@
   let musicPlaybackActive = false;
   let musicAudioContext = null;
   let musicGainNode = null;
+  let sfxGainNode = null;
   let musicSourceNode = null;
+  let activeMilestoneSourceNode = null;
+  let activeOutcomeSourceNode = null;
   let musicSourceStartedAt = 0;
   let musicPauseOffset = 0;
   let musicLoadToken = 0;
   let currentMusicThemeCacheKey = '';
-  let iosAudioUnlockAttempted = false;
-  let iosAudioUnlockPromise = null;
+  const sfxBufferCache = new Map();
   // Remembers whether the current background track was actually playing
   // before the tab became hidden, so we do not auto-enable music on return.
   let musicWasPlayingBeforeHide = false;
-  let musicEnabled = readStoredAudioSetting('music', true);
-  let soundEnabled = readStoredAudioSetting('sound', true);
+  let isMusicMuted = !readStoredAudioSetting('music', true);
+  let isSoundMuted = !readStoredAudioSetting('sound', true);
   const SOUND_VOLUMES = {
     defeat: 0.3,
     victory: 1,
   };
   const MUSIC_VOLUME = 0.45;
+  const backgroundMusic = {
+    play() {
+      return playMusic();
+    },
+    pause() {
+      pauseMusic();
+    },
+  };
 
   const yandex = {
     ysdk: null,
     player: null,
     initPromise: null,
+    scriptPromise: null,
     playerPromise: null,
     loadingReadySent: false,
     adShowing: false,
@@ -371,15 +378,47 @@
     },
   };
 
-  function initYandexSdk() {
-    if (yandex.initPromise) return yandex.initPromise;
-    if (!window.YaGames || typeof window.YaGames.init !== 'function') {
-      yandex.initPromise = Promise.resolve(null);
-      return yandex.initPromise;
+  function loadYandexSdkScript() {
+    if (yandex.scriptPromise) return yandex.scriptPromise;
+    if (!isEmbeddedRuntime()) {
+      yandex.scriptPromise = Promise.resolve(null);
+      return yandex.scriptPromise;
+    }
+    if (window.YaGames && typeof window.YaGames.init === 'function') {
+      yandex.scriptPromise = Promise.resolve(window.YaGames);
+      return yandex.scriptPromise;
     }
 
-    yandex.initPromise = window.YaGames.init()
+    yandex.scriptPromise = new Promise((resolve) => {
+      const existingScript = document.querySelector('script[data-yandex-games-sdk="true"]');
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve(window.YaGames || null), { once: true });
+        existingScript.addEventListener('error', () => resolve(null), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://yandex.ru/games/sdk/v2';
+      script.async = true;
+      script.dataset.yandexGamesSdk = 'true';
+      script.addEventListener('load', () => resolve(window.YaGames || null), { once: true });
+      script.addEventListener('error', () => resolve(null), { once: true });
+      document.head.appendChild(script);
+    });
+
+    return yandex.scriptPromise;
+  }
+
+  function initYandexSdk() {
+    if (yandex.initPromise) return yandex.initPromise;
+
+    yandex.initPromise = loadYandexSdkScript()
+      .then(() => {
+        if (!isYandexGamesRuntime()) return null;
+        return window.YaGames.init();
+      })
       .then((ysdk) => {
+        if (!ysdk) return null;
         yandex.ysdk = ysdk;
         syncLanguageFromYandex(ysdk);
         notifyGameReady();
@@ -414,6 +453,22 @@
 
   function needsLandscapeMode() {
     return isMobileDevice() && window.innerHeight > window.innerWidth;
+  }
+
+  function isEmbeddedRuntime() {
+    try {
+      return window.parent !== window;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function isYandexGamesRuntime() {
+    try {
+      return isEmbeddedRuntime() && !!window.YaGames && typeof window.YaGames.init === 'function';
+    } catch (error) {
+      return false;
+    }
   }
 
   function syncViewportCssVars() {
@@ -462,7 +517,7 @@
   }
 
   function notifyGameReady() {
-    if (yandex.loadingReadySent || !yandex.ysdk) return;
+    if (yandex.loadingReadySent || !yandex.ysdk || !isYandexGamesRuntime()) return;
     try {
       yandex.ysdk.features?.LoadingAPI?.ready?.();
       yandex.loadingReadySent = true;
@@ -472,7 +527,7 @@
   }
 
   function loadYandexPlayer() {
-    if (!yandex.ysdk || yandex.playerPromise || typeof yandex.ysdk.getPlayer !== 'function') return yandex.playerPromise;
+    if (!isYandexGamesRuntime() || !yandex.ysdk || yandex.playerPromise || typeof yandex.ysdk.getPlayer !== 'function') return yandex.playerPromise;
     yandex.playerPromise = yandex.ysdk
       .getPlayer({ signed: true })
       .then((player) => {
@@ -487,7 +542,7 @@
   }
 
   function startGameplayMarkup() {
-    if (!yandex.ysdk || yandex.gameplayActive || yandex.adShowing || state.screen !== 'game' || state.over) return;
+    if (!isYandexGamesRuntime() || !yandex.ysdk || yandex.gameplayActive || yandex.adShowing || state.screen !== 'game' || state.over) return;
     try {
       yandex.ysdk.features?.GameplayAPI?.start?.();
       yandex.gameplayActive = true;
@@ -497,7 +552,7 @@
   }
 
   function stopGameplayMarkup() {
-    if (!yandex.ysdk || !yandex.gameplayActive) return;
+    if (!isYandexGamesRuntime() || !yandex.ysdk || !yandex.gameplayActive) return;
     try {
       yandex.ysdk.features?.GameplayAPI?.stop?.();
     } catch (err) {
@@ -508,6 +563,10 @@
   }
 
   function showNewGameAd() {
+    if (!isYandexGamesRuntime()) {
+      startGameplayMarkup();
+      return;
+    }
     initYandexSdk().then((ysdk) => {
       if (!ysdk?.adv || yandex.adShowing) {
         startGameplayMarkup();
@@ -545,6 +604,7 @@
   }
 
   function showRewardedHintAd() {
+    if (!isYandexGamesRuntime()) return Promise.resolve({ rewarded: false, error: true });
     if (yandex.adShowing) return Promise.resolve({ rewarded: false });
 
     return initYandexSdk().then((ysdk) => new Promise((resolve) => {
@@ -595,6 +655,7 @@
   }
 
   function showRewardedContinueAd() {
+    if (!isYandexGamesRuntime()) return Promise.resolve({ rewarded: false, error: true });
     if (yandex.adShowing) return Promise.resolve({ rewarded: false });
 
     return initYandexSdk().then((ysdk) => new Promise((resolve) => {
@@ -996,16 +1057,26 @@
     applyLanguage(currentLanguage === 'ru' ? 'en' : 'ru');
   }
 
+  function safePlayBackgroundMusic(contextLabel = 'Background music playback failed') {
+    return backgroundMusic.play().catch((error) => {
+      console.warn(contextLabel, error);
+    });
+  }
+
+  function shouldMusicBeActive() {
+    return state.screen === 'game' && !state.over;
+  }
+
   function syncAudioButtons() {
     if (musicToggleBtn) {
-      musicToggleBtn.classList.toggle('isOff', !musicEnabled);
-      musicToggleBtn.setAttribute('aria-label', musicEnabled ? 'Выключить музыку' : 'Включить музыку');
-      musicToggleBtn.title = musicEnabled ? 'Выключить музыку' : 'Включить музыку';
+      musicToggleBtn.classList.toggle('isOff', isMusicMuted);
+      musicToggleBtn.setAttribute('aria-label', isMusicMuted ? 'Включить музыку' : 'Выключить музыку');
+      musicToggleBtn.title = isMusicMuted ? 'Включить музыку' : 'Выключить музыку';
     }
     if (soundToggleBtn) {
-      soundToggleBtn.classList.toggle('isOff', !soundEnabled);
-      soundToggleBtn.setAttribute('aria-label', soundEnabled ? 'Выключить звуки' : 'Включить звуки');
-      soundToggleBtn.title = soundEnabled ? 'Выключить звуки' : 'Включить звуки';
+      soundToggleBtn.classList.toggle('isOff', isSoundMuted);
+      soundToggleBtn.setAttribute('aria-label', isSoundMuted ? 'Включить звуки' : 'Выключить звуки');
+      soundToggleBtn.title = isSoundMuted ? 'Включить звуки' : 'Выключить звуки';
     }
   }
 
@@ -1018,9 +1089,10 @@
     saveThemeKey(currentThemeKey);
     syncThemeControls();
     configureMusicTracks();
+    void preloadCurrentThemeMusic();
 
-    if (restartMusic && changed && !musicPlaybackActive && musicEnabled && state.screen === 'game' && !state.over) {
-      startGameMusic();
+    if (restartMusic && changed && !musicPlaybackActive && !isMusicMuted && shouldMusicBeActive()) {
+      void safePlayBackgroundMusic('Background music restart failed after theme change');
     }
     if (state.screen === 'game') draw();
   }
@@ -1032,23 +1104,22 @@
   }
 
   function toggleMusic() {
-    musicEnabled = !musicEnabled;
-    saveAudioSetting('music', musicEnabled);
+    isMusicMuted = !isMusicMuted;
+    saveAudioSetting('music', !isMusicMuted);
     syncAudioButtons();
-    if (!musicEnabled) {
-      stopGameMusic();
+    if (isMusicMuted) {
+      backgroundMusic.pause();
       return;
     }
-    prepareIosAudioForPlayback();
-    if (state.screen === 'game' && !state.over) {
-      startGameMusic();
+    if (shouldMusicBeActive()) {
+      void safePlayBackgroundMusic('Background music playback failed after unmuting');
     }
   }
 
   function toggleSound() {
-    soundEnabled = !soundEnabled;
-    saveAudioSetting('sound', soundEnabled);
-    if (!soundEnabled) stopOutcomeSounds();
+    isSoundMuted = !isSoundMuted;
+    saveAudioSetting('sound', !isSoundMuted);
+    if (isSoundMuted) stopOutcomeSounds();
     syncSoundVolumes();
     syncAudioButtons();
   }
@@ -1481,22 +1552,13 @@
   }
 
   function stopOutcomeSounds() {
-    Object.values(outcomeSounds).forEach((sound) => {
-      sound.pause();
-      sound.currentTime = 0;
-    });
-    Object.values(milestoneSounds).forEach((sound) => {
-      sound.pause();
-      sound.currentTime = 0;
-    });
+    stopSfxSource('outcome');
+    stopSfxSource('milestone');
   }
 
   function syncSoundVolumes() {
-    outcomeSounds.defeat.volume = soundEnabled ? SOUND_VOLUMES.defeat : 0;
-    outcomeSounds.victory.volume = soundEnabled ? SOUND_VOLUMES.victory : 0;
-    Object.values(milestoneSounds).forEach((sound) => {
-      sound.volume = soundEnabled ? 1 : 0;
-    });
+    // Sound effects use Web Audio gain at playback time, so there is no
+    // persistent HTMLMediaElement volume state to synchronize.
   }
 
   function hideMilestonePopup() {
@@ -1514,16 +1576,11 @@
   }
 
   function playMilestoneVoice(milestoneKey) {
-    if (!soundEnabled || isAdAudioBlocked()) return;
+    if (isSoundMuted || isAdAudioBlocked()) return;
     const sound = milestoneSounds[milestoneKey];
     if (!sound) return;
-    Object.values(milestoneSounds).forEach((entry) => {
-      entry.pause();
-      entry.currentTime = 0;
-    });
-    sound.play().catch((err) => {
-      console.warn('Milestone voice playback failed', err);
-    });
+    stopSfxSource('milestone');
+    void playBufferedSound(sound, 1, 'milestone', 'Milestone voice playback failed');
   }
 
   function processMilestoneQueue() {
@@ -1581,26 +1638,39 @@
   }
 
   function playOutcomeSound(type) {
-    if (!soundEnabled || isAdAudioBlocked()) return;
+    if (isSoundMuted || isAdAudioBlocked()) return;
     const sound = outcomeSounds[type];
     if (!sound) return;
     stopOutcomeSounds();
-    sound.currentTime = 0;
-    sound.play().catch((err) => {
-      console.warn('Outcome sound playback failed', err);
-    });
+    void playBufferedSound(sound, SOUND_VOLUMES[type] || 1, 'outcome', 'Outcome sound playback failed');
   }
 
   function ensureMusicAudioContext() {
     if (musicAudioContext || !AudioContextCtor) return musicAudioContext;
-
-    // The background music uses Web Audio so mobile browsers do not expose it
-    // as a separate media session in the system notification area.
     musicAudioContext = new AudioContextCtor();
     musicGainNode = musicAudioContext.createGain();
     musicGainNode.gain.value = MUSIC_VOLUME;
     musicGainNode.connect(musicAudioContext.destination);
+    sfxGainNode = musicAudioContext.createGain();
+    sfxGainNode.gain.value = 1;
+    sfxGainNode.connect(musicAudioContext.destination);
     return musicAudioContext;
+  }
+
+  function stopSfxSource(channel) {
+    const sourceNode = channel === 'milestone' ? activeMilestoneSourceNode : activeOutcomeSourceNode;
+    if (!sourceNode) return;
+
+    if (channel === 'milestone') {
+      activeMilestoneSourceNode = null;
+    } else {
+      activeOutcomeSourceNode = null;
+    }
+
+    try {
+      sourceNode.stop();
+    } catch {}
+    sourceNode.disconnect();
   }
 
   function isMusicActuallyPlaying() {
@@ -1617,57 +1687,45 @@
     });
   }
 
-  function primeHtmlAudioElement(audio) {
-    if (!(audio instanceof HTMLMediaElement)) return Promise.resolve();
-    const previousMuted = audio.muted;
-    const previousTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
-    audio.muted = true;
+  function primeMusicAudioContext(audioContext) {
+    if (!audioContext) return Promise.resolve();
+
     try {
-      audio.currentTime = 0;
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0;
+      gainNode.connect(audioContext.destination);
+
+      const sourceNode = audioContext.createBufferSource();
+      sourceNode.buffer = audioContext.createBuffer(1, 1, 22050);
+      sourceNode.connect(gainNode);
+      sourceNode.start(0);
+      sourceNode.stop(audioContext.currentTime + 0.001);
     } catch {}
 
-    let playResult = null;
-    try {
-      playResult = audio.play();
-    } catch (err) {
-      audio.muted = previousMuted;
-      try {
-        audio.currentTime = previousTime;
-      } catch {}
-      return Promise.resolve();
-    }
-
-    return Promise.resolve(playResult)
-      .catch(() => {})
-      .then(() => {
-        audio.pause();
-        try {
-          audio.currentTime = 0;
-        } catch {}
-        audio.muted = previousMuted;
-      });
+    return Promise.resolve();
   }
 
-  function unlockIosAudio() {
-    if (!isIosSafari()) return Promise.resolve();
-    if (iosAudioUnlockPromise) return iosAudioUnlockPromise;
-
-    iosAudioUnlockAttempted = true;
-    iosAudioUnlockPromise = resumeMusicAudioContext()
-      .then(() => Promise.all(managedSfx.map((audio) => primeHtmlAudioElement(audio))))
-      .catch((err) => {
-        console.warn('iOS audio unlock failed', err);
+  function warmupAudioPlayback() {
+    return resumeMusicAudioContext()
+      .then((audioContext) => {
+        if (!audioContext) return false;
+        return primeMusicAudioContext(audioContext)
+          .then(() => preloadCurrentThemeMusic())
+          .then(() => audioContext.state === 'running');
       })
-      .then(() => {
-        iosAudioUnlockPromise = null;
+      .catch((err) => {
+        console.warn('Audio warmup failed', err);
+        return false;
       });
-
-    return iosAudioUnlockPromise;
   }
 
-  function prepareIosAudioForPlayback() {
-    if (!isIosSafari()) return;
-    void unlockIosAudio();
+  function preloadCurrentThemeMusic() {
+    const audioContext = ensureMusicAudioContext();
+    if (!audioContext) return Promise.resolve([]);
+    return loadMusic().catch((error) => {
+      console.warn('Background music preload failed', error);
+      return [];
+    });
   }
 
   function decodeAudioDataCompat(audioContext, arrayBuffer) {
@@ -1688,6 +1746,76 @@
 
   function createMusicThemeCacheKey() {
     return `${currentThemeKey}:${activeTheme().musicFiles.join('|')}`;
+  }
+
+  async function loadSharedAudioBuffer(src) {
+    const audioContext = ensureMusicAudioContext();
+    if (!audioContext) return null;
+
+    let bufferPromise = sfxBufferCache.get(src);
+    if (!bufferPromise) {
+      bufferPromise = (async () => {
+        let arrayBuffer = null;
+        try {
+          const response = await fetch(src);
+          if (!response.ok) {
+            throw new Error(`Failed to load audio file: ${src}`);
+          }
+          arrayBuffer = await response.arrayBuffer();
+        } catch (fetchErr) {
+          arrayBuffer = await loadArrayBufferViaXhr(src);
+        }
+
+        return decodeAudioDataCompat(audioContext, arrayBuffer);
+      })();
+      sfxBufferCache.set(src, bufferPromise);
+    }
+
+    try {
+      return await bufferPromise;
+    } catch (err) {
+      sfxBufferCache.delete(src);
+      throw err;
+    }
+  }
+
+  async function playBufferedSound(src, volume = 1, channel = 'outcome', errorLabel = 'Sound playback failed') {
+    const audioContext = await resumeMusicAudioContext();
+    if (!audioContext || !sfxGainNode) return;
+
+    try {
+      const buffer = await loadSharedAudioBuffer(src);
+      if (!buffer) return;
+
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = volume;
+      gainNode.connect(sfxGainNode);
+
+      const sourceNode = audioContext.createBufferSource();
+      sourceNode.buffer = buffer;
+      sourceNode.connect(gainNode);
+
+      if (channel === 'milestone') {
+        activeMilestoneSourceNode = sourceNode;
+      } else {
+        activeOutcomeSourceNode = sourceNode;
+      }
+
+      sourceNode.addEventListener('ended', () => {
+        gainNode.disconnect();
+        if (channel === 'milestone' && activeMilestoneSourceNode === sourceNode) {
+          activeMilestoneSourceNode = null;
+        }
+        if (channel === 'outcome' && activeOutcomeSourceNode === sourceNode) {
+          activeOutcomeSourceNode = null;
+        }
+        sourceNode.disconnect();
+      }, { once: true });
+
+      sourceNode.start(0);
+    } catch (err) {
+      console.warn(errorLabel, err);
+    }
   }
 
   function loadArrayBufferViaXhr(src) {
@@ -1811,7 +1939,7 @@
     currentMusicIndex = -1;
     musicPlaybackActive = false;
 
-    if (shouldResume && musicEnabled && state.screen === 'game' && !state.over) {
+    if (shouldResume && !isMusicMuted && shouldMusicBeActive()) {
       startGameMusic();
     }
   }
@@ -1826,6 +1954,7 @@
 
   function pauseMusic() {
     musicLoadToken++;
+    musicPlaybackActive = false;
     teardownMusicSource(true);
   }
 
@@ -1847,7 +1976,7 @@
     if (yandex.audioPausedForAd) return Promise.resolve();
 
     yandex.audioPausedForAd = true;
-    yandex.musicWasPlayingBeforeAd = Boolean(isMusicActuallyPlaying() && musicEnabled && musicPlaybackActive);
+    yandex.musicWasPlayingBeforeAd = Boolean(isMusicActuallyPlaying() && !isMusicMuted && musicPlaybackActive);
     stopOutcomeSounds();
 
     if (yandex.musicWasPlayingBeforeAd) {
@@ -1864,23 +1993,23 @@
   function resumeAudioAfterAd() {
     if (!yandex.audioPausedForAd) return;
 
-    const shouldResumeMusic = yandex.musicWasPlayingBeforeAd && musicEnabled && state.screen === 'game' && !state.over;
+    const shouldResumeMusic = yandex.musicWasPlayingBeforeAd && !isMusicMuted && shouldMusicBeActive();
     yandex.audioPausedForAd = false;
     yandex.musicWasPlayingBeforeAd = false;
     yandex.audioContextSuspendedForAd = false;
 
     if (shouldResumeMusic) {
-      void playMusic();
+      void safePlayBackgroundMusic('Background music resume failed after ad');
       return;
     }
 
-    if (!musicEnabled || state.screen !== 'game' || state.over) {
+    if (isMusicMuted || !shouldMusicBeActive()) {
       stopMusic();
     }
   }
 
   async function playMusic() {
-    if (!musicEnabled || state.over || state.screen !== 'game' || isAdAudioBlocked()) return;
+    if (isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return;
 
     musicPlaybackActive = true;
     const playbackToken = ++musicLoadToken;
@@ -1891,9 +2020,8 @@
     if (
       playbackToken !== musicLoadToken ||
       !musicPlaybackActive ||
-      !musicEnabled ||
-      state.over ||
-      state.screen !== 'game' ||
+      isMusicMuted ||
+      !shouldMusicBeActive() ||
       !buffers.length
     ) {
       return;
@@ -1920,7 +2048,14 @@
 
     const startOffset = getSafeMusicOffset(currentBuffer, musicPauseOffset);
     musicSourceStartedAt = audioContext.currentTime - startOffset;
-    sourceNode.start(0, startOffset);
+    try {
+      sourceNode.start(0, startOffset);
+    } catch (error) {
+      if (musicSourceNode === sourceNode) musicSourceNode = null;
+      sourceNode.disconnect();
+      musicPlaybackActive = false;
+      throw error;
+    }
   }
 
   function stopGameMusic() {
@@ -1930,7 +2065,7 @@
   function handleDocumentVisibilityChange() {
     if (document.hidden) {
       // Pause only if music was really playing before hiding the tab.
-      musicWasPlayingBeforeHide = Boolean(isMusicActuallyPlaying() && musicEnabled && musicPlaybackActive);
+      musicWasPlayingBeforeHide = Boolean(isMusicActuallyPlaying() && !isMusicMuted && musicPlaybackActive);
       if (musicWasPlayingBeforeHide) {
         pauseMusic();
       }
@@ -1944,31 +2079,19 @@
 
     // Resume only when the player did not mute music manually and the game
     // is still in a state where music is supposed to be active.
-    if (!musicWasPlayingBeforeHide || !musicEnabled || state.over || state.screen !== 'game') {
+    if (!musicWasPlayingBeforeHide || isMusicMuted || !shouldMusicBeActive()) {
       musicWasPlayingBeforeHide = false;
       return;
     }
 
     musicWasPlayingBeforeHide = false;
-    void playMusic();
+    void safePlayBackgroundMusic('Background music resume failed after tab became visible');
   }
 
   function startGameMusic() {
     stopMusic();
-    if (!musicEnabled) return;
-    void playMusic();
-  }
-
-  function installIosAudioUnlockHandlers() {
-    if (!isIosSafari() || iosAudioUnlockAttempted) return;
-
-    const unlockOnce = () => {
-      if (iosAudioUnlockAttempted) return;
-      void unlockIosAudio();
-    };
-
-    document.addEventListener('touchstart', unlockOnce, { passive: true, capture: true, once: true });
-    document.addEventListener('pointerdown', unlockOnce, { passive: true, capture: true, once: true });
+    if (isMusicMuted || !shouldMusicBeActive()) return;
+    void safePlayBackgroundMusic();
   }
 
   function startTimer() {
@@ -2191,19 +2314,43 @@
     hideLossModal();
     resize();
     draw();
-    startGameMusic();
     showNewGameAd();
   }
 
   function startSelectedGame() {
     const selection = getSelection();
-    prepareIosAudioForPlayback();
     showGame();
     newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset);
   }
 
+  let playButtonStartLocked = false;
+
+  function startGameMusicFromGesture() {
+    return warmupAudioPlayback().then((ready) => {
+      if (!ready || isMusicMuted || state.screen !== 'game' || state.over) return false;
+      if (isMusicActuallyPlaying() && musicPlaybackActive) return true;
+      startGameMusic();
+      return true;
+    });
+  }
+
+  function handlePlayButtonPress() {
+    if (playButtonStartLocked) return;
+    playButtonStartLocked = true;
+    startSelectedGame();
+    void startGameMusicFromGesture();
+    window.setTimeout(() => {
+      playButtonStartLocked = false;
+    }, 700);
+  }
+
   function restartSameSettings() {
     newGame(state.w, state.h, state.mines, state.currentRecordKey, state.currentPreset);
+  }
+
+  function handleReplayButtonPress() {
+    restartSameSettings();
+    void startGameMusicFromGesture();
   }
 
   function getCanvasRect() {
@@ -2755,14 +2902,14 @@
 
   function syncAudioButtons() {
     if (musicToggleBtn) {
-      musicToggleBtn.classList.toggle('isOff', !musicEnabled);
-      musicToggleBtn.setAttribute('aria-label', musicEnabled ? t('music_off') : t('music_on'));
-      musicToggleBtn.title = musicEnabled ? t('music_off') : t('music_on');
+      musicToggleBtn.classList.toggle('isOff', isMusicMuted);
+      musicToggleBtn.setAttribute('aria-label', isMusicMuted ? t('music_on') : t('music_off'));
+      musicToggleBtn.title = isMusicMuted ? t('music_on') : t('music_off');
     }
     if (soundToggleBtn) {
-      soundToggleBtn.classList.toggle('isOff', !soundEnabled);
-      soundToggleBtn.setAttribute('aria-label', soundEnabled ? t('sound_off') : t('sound_on'));
-      soundToggleBtn.title = soundEnabled ? t('sound_off') : t('sound_on');
+      soundToggleBtn.classList.toggle('isOff', isSoundMuted);
+      soundToggleBtn.setAttribute('aria-label', isSoundMuted ? t('sound_on') : t('sound_off'));
+      soundToggleBtn.title = isSoundMuted ? t('sound_on') : t('sound_off');
     }
   }
 
@@ -2982,7 +3129,9 @@
 
   faceBtn.addEventListener('click', restartSameSettings);
   if (hintBtn) hintBtn.addEventListener('click', startHintMode);
-  if (playBtn) playBtn.addEventListener('click', startSelectedGame);
+  if (playBtn) {
+    playBtn.addEventListener('click', handlePlayButtonPress);
+  }
   if (menuBtn) menuBtn.addEventListener('click', showMenu);
   if (languageToggleBtn) languageToggleBtn.addEventListener('click', toggleLanguage);
   if (musicToggleBtn) musicToggleBtn.addEventListener('click', toggleMusic);
@@ -3026,7 +3175,7 @@
   if (victoryAgain) {
     victoryAgain.addEventListener('click', () => {
       hideVictoryModal();
-      restartSameSettings();
+      handleReplayButtonPress();
     });
   }
   if (victoryModal) {
@@ -3041,7 +3190,7 @@
   if (lossAgain) {
     lossAgain.addEventListener('click', () => {
       hideLossModal();
-      restartSameSettings();
+      handleReplayButtonPress();
     });
   }
   if (lossModal) {
@@ -3089,7 +3238,6 @@
 
   updateCustomVisibility();
   syncMobileViewportState();
-  installIosAudioUnlockHandlers();
   syncSoundVolumes();
   applyTheme(currentThemeKey);
   // Apply a fallback language immediately, then let SDK startup auto-detection
