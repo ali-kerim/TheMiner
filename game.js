@@ -111,6 +111,7 @@
   const sfxBufferCache = new Map();
   let iosAudioUnlocked = false;
   let iosAudioUnlockPromise = null;
+  let iosPlayAudioWarmupPromise = null;
   // Remembers whether the current background track was actually playing
   // before the tab became hidden, so we do not auto-enable music on return.
   let musicWasPlayingBeforeHide = false;
@@ -1760,6 +1761,30 @@
     return unlockIosAudio();
   }
 
+  function warmupIosPlayAudio() {
+    if (!isIosSafari()) return Promise.resolve(true);
+    if (iosPlayAudioWarmupPromise) return iosPlayAudioWarmupPromise;
+
+    iosPlayAudioWarmupPromise = (async () => {
+      const unlocked = await prepareIosAudioForPlayback();
+      if (!unlocked) return false;
+      const audioContext = await resumeMusicAudioContext();
+      if (!audioContext) return false;
+      await loadMusic();
+      clearBrowserMediaSession();
+      return true;
+    })()
+      .catch((error) => {
+        console.warn('iOS play audio warmup failed', error);
+        return false;
+      })
+      .finally(() => {
+        iosPlayAudioWarmupPromise = null;
+      });
+
+    return iosPlayAudioWarmupPromise;
+  }
+
   function decodeAudioDataCompat(audioContext, arrayBuffer) {
     const copy = arrayBuffer.slice(0);
     try {
@@ -2141,7 +2166,7 @@
   function installIosAudioUnlockHandlers() {
     if (!isIosSafari() || !playBtn) return;
     const unlockOnPlayGesture = () => {
-      void prepareIosAudioForPlayback();
+      void warmupIosPlayAudio();
     };
     playBtn.addEventListener('touchstart', unlockOnPlayGesture, { passive: true });
     playBtn.addEventListener('pointerdown', unlockOnPlayGesture, { passive: true });
@@ -2332,7 +2357,8 @@
     if (state.revealed >= safeCells) gameOver(true);
   }
 
-  function newGame(w, h, m, recordKey, presetKey) {
+  function newGame(w, h, m, recordKey, presetKey, options = {}) {
+    const deferMusicStart = Boolean(options.deferMusicStart);
     stopGameplayMarkup();
     state.w = clamp(w | 0, 5, 60);
     state.h = clamp(h | 0, 5, 40);
@@ -2367,15 +2393,16 @@
     hideLossModal();
     resize();
     draw();
-    startGameMusic();
+    if (!deferMusicStart) startGameMusic();
     showNewGameAd();
   }
 
-  function startSelectedGame() {
+  function startSelectedGame(options = {}) {
     const selection = getSelection();
-    void prepareIosAudioForPlayback();
+    const deferMusicStart = Boolean(options.deferMusicStart);
+    if (!deferMusicStart) void prepareIosAudioForPlayback();
     showGame();
-    newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset);
+    newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset, { deferMusicStart });
   }
 
   let playButtonStartLocked = false;
@@ -2383,7 +2410,15 @@
   function handlePlayButtonPress() {
     if (playButtonStartLocked) return;
     playButtonStartLocked = true;
-    startSelectedGame();
+    const shouldDeferMusicStartForIos = isIosSafari() && !isMusicMuted;
+    const iosWarmupPromise = shouldDeferMusicStartForIos ? warmupIosPlayAudio() : null;
+    startSelectedGame({ deferMusicStart: shouldDeferMusicStartForIos });
+    if (iosWarmupPromise) {
+      void iosWarmupPromise.then((ready) => {
+        if (!ready || isMusicMuted || state.screen !== 'game' || state.over || isMusicActuallyPlaying()) return;
+        return safePlayBackgroundMusic('iOS background music start failed after Play warmup');
+      });
+    }
     window.setTimeout(() => {
       playButtonStartLocked = false;
     }, 700);
