@@ -2140,6 +2140,50 @@
     clearBrowserMediaSession();
   }
 
+  function tryStartGameMusicFromGesture() {
+    if (isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return false;
+
+    const audioContext = ensureMusicAudioContext();
+    if (!audioContext || audioContext.state !== 'running' || !musicGainNode || !musicBuffers.length) {
+      return false;
+    }
+
+    musicLoadToken++;
+    teardownMusicSource(false);
+    musicPlaybackActive = true;
+    musicWasPlayingBeforeHide = false;
+
+    if (currentMusicIndex < 0 || !musicBuffers[currentMusicIndex]) {
+      currentMusicIndex = pickNextMusicIndex(musicBuffers);
+      musicPauseOffset = 0;
+    }
+
+    const currentBuffer = getCurrentMusicBuffer();
+    if (!currentBuffer) return false;
+
+    const sourceNode = audioContext.createBufferSource();
+    sourceNode.buffer = currentBuffer;
+    sourceNode.loop = true;
+    sourceNode.connect(musicGainNode);
+    musicSourceNode = sourceNode;
+
+    const startOffset = getSafeMusicOffset(currentBuffer, musicPauseOffset);
+    musicSourceStartedAt = audioContext.currentTime - startOffset;
+
+    try {
+      sourceNode.start(0, startOffset);
+    } catch (error) {
+      if (musicSourceNode === sourceNode) musicSourceNode = null;
+      sourceNode.disconnect();
+      musicPlaybackActive = false;
+      console.warn('Gesture music start failed', error);
+      return false;
+    }
+
+    clearBrowserMediaSession();
+    return true;
+  }
+
   function stopGameMusic() {
     stopMusic();
   }
@@ -2261,7 +2305,13 @@
       startTimer();
       setFace('😮');
       ensureMinesPlaced(x, y);
-      startGameMusic();
+      if (isIosSafari()) {
+        if (!tryStartGameMusicFromGesture()) {
+          void safePlayBackgroundMusic('iOS background music start failed after first move');
+        }
+      } else {
+        startGameMusic();
+      }
     }
 
     c.revealed = true;
@@ -2888,6 +2938,9 @@
   canvas.addEventListener('pointerdown', (e) => {
     if (state.screen !== 'game') return;
     if (!(e.pointerType === 'mouse' || e.pointerType === 'touch' || e.pointerType === 'pen')) return;
+    if (isIosSafari() && !state.started && !state.over) {
+      void warmupIosPlayAudio();
+    }
     canvas.setPointerCapture(e.pointerId);
     state.pointerDown = true;
     state.longPressFired = false;
