@@ -112,6 +112,12 @@
   let iosAudioUnlocked = false;
   let iosAudioUnlockPromise = null;
   let iosPlayAudioWarmupPromise = null;
+  let iosBackgroundAudio = null;
+  let iosUnlockAudio = null;
+  let iosBackgroundThemeKey = '';
+  let iosBackgroundTrackSrc = '';
+  let activeMilestoneAudio = null;
+  let activeOutcomeAudio = null;
   // Remembers whether the current background track was actually playing
   // before the tab became hidden, so we do not auto-enable music on return.
   let musicWasPlayingBeforeHide = false;
@@ -122,6 +128,7 @@
     victory: 1,
   };
   const MUSIC_VOLUME = 0.45;
+  const IOS_SILENT_AUDIO_DATA_URI = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAAAA';
   const backgroundMusic = {
     play() {
       return playMusic();
@@ -1649,7 +1656,139 @@
     void playBufferedSound(sound, SOUND_VOLUMES[type] || 1, 'outcome', 'Outcome sound playback failed');
   }
 
+  function shouldUseIosHtmlAudioFallback() {
+    return isIosSafari();
+  }
+
+  function createInlineAudio(src = '') {
+    const audio = new Audio(src);
+    audio.preload = 'auto';
+    audio.playsInline = true;
+    audio.setAttribute('playsinline', '');
+    audio.setAttribute('webkit-playsinline', '');
+    return audio;
+  }
+
+  function ensureIosUnlockAudio() {
+    if (!iosUnlockAudio) {
+      iosUnlockAudio = createInlineAudio(IOS_SILENT_AUDIO_DATA_URI);
+      iosUnlockAudio.volume = 0;
+      iosUnlockAudio.muted = true;
+    }
+    return iosUnlockAudio;
+  }
+
+  function ensureIosBackgroundAudio() {
+    if (!iosBackgroundAudio) {
+      iosBackgroundAudio = createInlineAudio();
+      iosBackgroundAudio.loop = true;
+      iosBackgroundAudio.volume = MUSIC_VOLUME;
+    }
+    return iosBackgroundAudio;
+  }
+
+  function configureIosBackgroundTrack(forceRefresh = false) {
+    const musicFiles = activeTheme().musicFiles || [];
+    if (!musicFiles.length) return null;
+
+    const audio = ensureIosBackgroundAudio();
+    const themeChanged = iosBackgroundThemeKey !== currentThemeKey;
+    if (themeChanged) {
+      iosBackgroundThemeKey = currentThemeKey;
+      iosBackgroundTrackSrc = '';
+      currentMusicIndex = -1;
+    }
+
+    if (currentMusicIndex < 0 || !musicFiles[currentMusicIndex]) {
+      currentMusicIndex = pickNextMusicIndex(musicFiles);
+    }
+
+    const nextSrc = musicFiles[currentMusicIndex] || musicFiles[0];
+    if (!nextSrc) return null;
+
+    if (forceRefresh || iosBackgroundTrackSrc !== nextSrc || audio.src !== new URL(nextSrc, window.location.href).href) {
+      audio.pause();
+      audio.src = nextSrc;
+      audio.load();
+      iosBackgroundTrackSrc = nextSrc;
+    }
+
+    audio.volume = MUSIC_VOLUME;
+    return audio;
+  }
+
+  function stopIosAudioElement(audio) {
+    if (!audio) return;
+    audio.pause();
+    try {
+      audio.currentTime = 0;
+    } catch {}
+  }
+
+  function stopIosSfxChannel(channel) {
+    if (channel === 'milestone') {
+      stopIosAudioElement(activeMilestoneAudio);
+      activeMilestoneAudio = null;
+      return;
+    }
+    stopIosAudioElement(activeOutcomeAudio);
+    activeOutcomeAudio = null;
+  }
+
+  function playIosAudioEffect(src, volume = 1, channel = 'outcome', errorLabel = 'Sound playback failed') {
+    if (isSoundMuted || isAdAudioBlocked()) return Promise.resolve();
+
+    return unlockIosAudio()
+      .then((unlocked) => {
+        if (!unlocked) return;
+        stopIosSfxChannel(channel);
+        const audio = createInlineAudio(src);
+        audio.volume = volume;
+        if (channel === 'milestone') activeMilestoneAudio = audio;
+        else activeOutcomeAudio = audio;
+
+        const cleanup = () => {
+          if (channel === 'milestone' && activeMilestoneAudio === audio) activeMilestoneAudio = null;
+          if (channel === 'outcome' && activeOutcomeAudio === audio) activeOutcomeAudio = null;
+        };
+
+        audio.addEventListener('ended', cleanup, { once: true });
+        audio.addEventListener('pause', cleanup, { once: true });
+        return audio.play().then(() => {
+          clearBrowserMediaSession();
+        }).catch((error) => {
+          cleanup();
+          console.warn(errorLabel, error);
+        });
+      });
+  }
+
+  function playIosBackgroundMusic() {
+    if (isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return Promise.resolve();
+
+    const audio = configureIosBackgroundTrack();
+    if (!audio) return Promise.resolve();
+
+    musicPlaybackActive = true;
+    audio.volume = MUSIC_VOLUME;
+
+    return unlockIosAudio()
+      .then((unlocked) => {
+        if (!unlocked) {
+          musicPlaybackActive = false;
+          return;
+        }
+        return audio.play().then(() => {
+          clearBrowserMediaSession();
+        }).catch((error) => {
+          musicPlaybackActive = false;
+          throw error;
+        });
+      });
+  }
+
   function ensureMusicAudioContext() {
+    if (shouldUseIosHtmlAudioFallback()) return null;
     if (musicAudioContext || !AudioContextCtor) return musicAudioContext;
 
     // The background music uses Web Audio so mobile browsers do not expose it
@@ -1665,6 +1804,10 @@
   }
 
   function stopSfxSource(channel) {
+    if (shouldUseIosHtmlAudioFallback()) {
+      stopIosSfxChannel(channel);
+      return;
+    }
     const sourceNode = channel === 'milestone' ? activeMilestoneSourceNode : activeOutcomeSourceNode;
     if (!sourceNode) return;
 
@@ -1681,10 +1824,14 @@
   }
 
   function isMusicActuallyPlaying() {
+    if (shouldUseIosHtmlAudioFallback()) {
+      return Boolean(iosBackgroundAudio && !iosBackgroundAudio.paused && !iosBackgroundAudio.ended);
+    }
     return Boolean(musicSourceNode);
   }
 
   function resumeMusicAudioContext() {
+    if (shouldUseIosHtmlAudioFallback()) return Promise.resolve(null);
     const audioContext = ensureMusicAudioContext();
     if (!audioContext) return Promise.resolve(null);
     if (audioContext.state === 'running') return Promise.resolve(audioContext);
@@ -1736,6 +1883,32 @@
     if (iosAudioUnlocked) return Promise.resolve(true);
     if (iosAudioUnlockPromise) return iosAudioUnlockPromise;
 
+    if (shouldUseIosHtmlAudioFallback()) {
+      iosAudioUnlockPromise = Promise.resolve()
+        .then(() => {
+          const unlockAudio = ensureIosUnlockAudio();
+          unlockAudio.currentTime = 0;
+          return unlockAudio.play().then(() => {
+            unlockAudio.pause();
+            unlockAudio.currentTime = 0;
+            iosAudioUnlocked = true;
+            clearBrowserMediaSession();
+            return true;
+          });
+        })
+        .catch((err) => {
+          console.warn('iOS audio unlock failed', err);
+          return false;
+        })
+        .then((unlocked) => {
+          iosAudioUnlockPromise = null;
+          iosAudioUnlocked = Boolean(unlocked);
+          return iosAudioUnlocked;
+        });
+
+      return iosAudioUnlockPromise;
+    }
+
     iosAudioUnlockPromise = resumeMusicAudioContext()
       .then((audioContext) => {
         if (!audioContext) return false;
@@ -1767,6 +1940,10 @@
   }
 
   function preloadCurrentThemeMusic() {
+    if (shouldUseIosHtmlAudioFallback()) {
+      const audio = configureIosBackgroundTrack(true);
+      return Promise.resolve(audio ? [audio] : []);
+    }
     const audioContext = ensureMusicAudioContext();
     if (!audioContext) return Promise.resolve([]);
     return loadMusic().catch((error) => {
@@ -1851,6 +2028,10 @@
   }
 
   async function playBufferedSound(src, volume = 1, channel = 'outcome', errorLabel = 'Sound playback failed') {
+    if (shouldUseIosHtmlAudioFallback()) {
+      return playIosAudioEffect(src, volume, channel, errorLabel);
+    }
+
     if (isIosSafari()) {
       await unlockIosAudio();
     }
@@ -2008,6 +2189,17 @@
 
   function configureMusicTracks() {
     const shouldResume = musicPlaybackActive;
+    if (shouldUseIosHtmlAudioFallback()) {
+      stopMusic();
+      iosBackgroundThemeKey = '';
+      iosBackgroundTrackSrc = '';
+      currentMusicIndex = -1;
+      void preloadCurrentThemeMusic();
+      if (shouldResume && !isMusicMuted && shouldMusicBeActive()) {
+        startGameMusic();
+      }
+      return;
+    }
     musicLoadToken++;
     teardownMusicSource(false);
     musicBuffers = [];
@@ -2021,6 +2213,18 @@
   }
 
   function stopMusic() {
+    if (shouldUseIosHtmlAudioFallback()) {
+      musicPlaybackActive = false;
+      musicWasPlayingBeforeHide = false;
+      if (iosBackgroundAudio) {
+        iosBackgroundAudio.pause();
+        try {
+          iosBackgroundAudio.currentTime = 0;
+        } catch {}
+      }
+      clearBrowserMediaSession();
+      return;
+    }
     musicLoadToken++;
     musicPlaybackActive = false;
     musicWasPlayingBeforeHide = false;
@@ -2030,12 +2234,19 @@
   }
 
   function pauseMusic() {
+    if (shouldUseIosHtmlAudioFallback()) {
+      musicPlaybackActive = false;
+      if (iosBackgroundAudio) iosBackgroundAudio.pause();
+      clearBrowserMediaSession();
+      return;
+    }
     musicLoadToken++;
     teardownMusicSource(true);
     clearBrowserMediaSession();
   }
 
   function suspendMusicAudioContext() {
+    if (shouldUseIosHtmlAudioFallback()) return Promise.resolve(false);
     if (!musicAudioContext || musicAudioContext.state !== 'running') return Promise.resolve(false);
     return musicAudioContext.suspend()
       .then(() => true)
@@ -2086,6 +2297,9 @@
   }
 
   async function playMusic() {
+    if (shouldUseIosHtmlAudioFallback()) {
+      return playIosBackgroundMusic();
+    }
     if (isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return;
 
     if (isIosSafari()) {
@@ -2141,6 +2355,29 @@
   }
 
   function tryStartGameMusicFromGesture() {
+    if (shouldUseIosHtmlAudioFallback()) {
+      const audio = configureIosBackgroundTrack();
+      if (!audio || isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return false;
+
+      musicPlaybackActive = true;
+      audio.volume = MUSIC_VOLUME;
+      try {
+        const playResult = audio.play();
+        if (playResult && typeof playResult.catch === 'function') {
+          playResult.catch((error) => {
+            musicPlaybackActive = false;
+            console.warn('Gesture music start failed', error);
+          });
+        }
+        clearBrowserMediaSession();
+        return true;
+      } catch (error) {
+        musicPlaybackActive = false;
+        console.warn('Gesture music start failed', error);
+        return false;
+      }
+    }
+
     if (isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return false;
 
     const audioContext = ensureMusicAudioContext();
