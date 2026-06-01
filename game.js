@@ -1077,6 +1077,69 @@
     return state.screen === 'game' && state.started && !state.over;
   }
 
+  function shouldMusicBePlayableNow() {
+    return state.screen === 'game' && !state.over;
+  }
+
+  async function startMusicFromToggle() {
+    if (isMusicMuted || !shouldMusicBePlayableNow() || isAdAudioBlocked()) return;
+
+    if (isIosSafari()) {
+      const unlocked = await prepareIosAudioForPlayback();
+      if (!unlocked) return;
+      await preloadCurrentThemeMusic();
+      if (tryStartGameMusicFromGesture(true)) return;
+    }
+
+    musicPlaybackActive = true;
+    const playbackToken = ++musicLoadToken;
+    const audioContext = await resumeMusicAudioContext();
+    if (!audioContext) return;
+
+    const buffers = await loadMusic();
+    if (
+      playbackToken !== musicLoadToken ||
+      !musicPlaybackActive ||
+      isMusicMuted ||
+      !shouldMusicBePlayableNow() ||
+      !buffers.length
+    ) {
+      return;
+    }
+
+    if (currentMusicIndex < 0 || !buffers[currentMusicIndex]) {
+      currentMusicIndex = pickNextMusicIndex(buffers);
+      musicPauseOffset = 0;
+    }
+
+    const currentBuffer = getCurrentMusicBuffer();
+    if (!currentBuffer || !musicGainNode) return;
+
+    if (musicSourceNode) {
+      teardownMusicSource(false);
+    }
+
+    const sourceNode = audioContext.createBufferSource();
+    sourceNode.buffer = currentBuffer;
+    sourceNode.loop = true;
+    sourceNode.connect(musicGainNode);
+    musicSourceNode = sourceNode;
+
+    const startOffset = getSafeMusicOffset(currentBuffer, musicPauseOffset);
+    musicSourceStartedAt = audioContext.currentTime - startOffset;
+
+    try {
+      sourceNode.start(0, startOffset);
+    } catch (error) {
+      if (musicSourceNode === sourceNode) musicSourceNode = null;
+      sourceNode.disconnect();
+      musicPlaybackActive = false;
+      throw error;
+    }
+
+    clearBrowserMediaSession();
+  }
+
   function syncAudioButtons() {
     if (musicToggleBtn) {
       musicToggleBtn.classList.toggle('isOff', isMusicMuted);
@@ -1121,9 +1184,10 @@
       backgroundMusic.pause();
       return;
     }
-    prepareIosAudioForPlayback();
-    if (shouldMusicBeActive()) {
-      void safePlayBackgroundMusic('Background music playback failed after unmuting');
+    if (shouldMusicBePlayableNow()) {
+      void startMusicFromToggle().catch((error) => {
+        console.warn('Background music playback failed after unmuting', error);
+      });
     }
   }
 
