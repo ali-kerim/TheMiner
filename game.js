@@ -381,7 +381,7 @@
 
   function initYandexSdk() {
     if (yandex.initPromise) return yandex.initPromise;
-    if (!window.YaGames || typeof window.YaGames.init !== 'function') {
+    if (!isYandexGamesRuntime()) {
       yandex.initPromise = Promise.resolve(null);
       return yandex.initPromise;
     }
@@ -422,6 +422,14 @@
 
   function needsLandscapeMode() {
     return isMobileDevice() && window.innerHeight > window.innerWidth;
+  }
+
+  function isYandexGamesRuntime() {
+    try {
+      return window.parent !== window && !!window.YaGames && typeof window.YaGames.init === 'function';
+    } catch (error) {
+      return false;
+    }
   }
 
   function syncViewportCssVars() {
@@ -470,7 +478,7 @@
   }
 
   function notifyGameReady() {
-    if (yandex.loadingReadySent || !yandex.ysdk) return;
+    if (yandex.loadingReadySent || !yandex.ysdk || !isYandexGamesRuntime()) return;
     try {
       yandex.ysdk.features?.LoadingAPI?.ready?.();
       yandex.loadingReadySent = true;
@@ -480,7 +488,7 @@
   }
 
   function loadYandexPlayer() {
-    if (!yandex.ysdk || yandex.playerPromise || typeof yandex.ysdk.getPlayer !== 'function') return yandex.playerPromise;
+    if (!isYandexGamesRuntime() || !yandex.ysdk || yandex.playerPromise || typeof yandex.ysdk.getPlayer !== 'function') return yandex.playerPromise;
     yandex.playerPromise = yandex.ysdk
       .getPlayer({ signed: true })
       .then((player) => {
@@ -495,7 +503,7 @@
   }
 
   function startGameplayMarkup() {
-    if (!yandex.ysdk || yandex.gameplayActive || yandex.adShowing || state.screen !== 'game' || state.over) return;
+    if (!isYandexGamesRuntime() || !yandex.ysdk || yandex.gameplayActive || yandex.adShowing || state.screen !== 'game' || state.over) return;
     try {
       yandex.ysdk.features?.GameplayAPI?.start?.();
       yandex.gameplayActive = true;
@@ -505,7 +513,7 @@
   }
 
   function stopGameplayMarkup() {
-    if (!yandex.ysdk || !yandex.gameplayActive) return;
+    if (!isYandexGamesRuntime() || !yandex.ysdk || !yandex.gameplayActive) return;
     try {
       yandex.ysdk.features?.GameplayAPI?.stop?.();
     } catch (err) {
@@ -516,6 +524,10 @@
   }
 
   function showNewGameAd() {
+    if (!isYandexGamesRuntime()) {
+      startGameplayMarkup();
+      return;
+    }
     initYandexSdk().then((ysdk) => {
       if (!ysdk?.adv || yandex.adShowing) {
         startGameplayMarkup();
@@ -553,6 +565,7 @@
   }
 
   function showRewardedHintAd() {
+    if (!isYandexGamesRuntime()) return Promise.resolve({ rewarded: false, error: true });
     if (yandex.adShowing) return Promise.resolve({ rewarded: false });
 
     return initYandexSdk().then((ysdk) => new Promise((resolve) => {
@@ -603,6 +616,7 @@
   }
 
   function showRewardedContinueAd() {
+    if (!isYandexGamesRuntime()) return Promise.resolve({ rewarded: false, error: true });
     if (yandex.adShowing) return Promise.resolve({ rewarded: false });
 
     return initYandexSdk().then((ysdk) => new Promise((resolve) => {
