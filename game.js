@@ -2371,23 +2371,31 @@
     showNewGameAd();
   }
 
-  function startSelectedGame() {
+  async function startSelectedGame() {
     const selection = getSelection();
-    void prepareIosAudioForPlayback();
+    await prepareIosAudioForPlayback();
     showGame();
     newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset);
   }
 
   let playButtonStartLocked = false;
+  let lastPlayTouchTime = 0;
 
-  function handlePlayButtonPress(event) {
-    if (event?.type === 'touchend') event.preventDefault();
+  async function handlePlayButtonPress(event) {
+    if (event?.type === 'touchend') {
+      event.preventDefault();
+      lastPlayTouchTime = Date.now();
+    }
+    if (event?.type === 'click' && Date.now() - lastPlayTouchTime < 700) return;
     if (playButtonStartLocked) return;
     playButtonStartLocked = true;
-    startSelectedGame();
-    window.setTimeout(() => {
-      playButtonStartLocked = false;
-    }, 0);
+    try {
+      await startSelectedGame();
+    } finally {
+      window.setTimeout(() => {
+        playButtonStartLocked = false;
+      }, 700);
+    }
   }
 
   function restartSameSettings() {
@@ -3171,8 +3179,16 @@
   faceBtn.addEventListener('click', restartSameSettings);
   if (hintBtn) hintBtn.addEventListener('click', startHintMode);
   if (playBtn) {
-    playBtn.addEventListener('click', handlePlayButtonPress);
-    playBtn.addEventListener('touchend', handlePlayButtonPress, { passive: false });
+    playBtn.addEventListener('click', (event) => {
+      void handlePlayButtonPress(event).catch((error) => {
+        console.warn('Play button start failed', error);
+      });
+    });
+    playBtn.addEventListener('touchend', (event) => {
+      void handlePlayButtonPress(event).catch((error) => {
+        console.warn('Play button start failed', error);
+      });
+    }, { passive: false });
   }
   if (menuBtn) menuBtn.addEventListener('click', showMenu);
   if (languageToggleBtn) languageToggleBtn.addEventListener('click', toggleLanguage);
