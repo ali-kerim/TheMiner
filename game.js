@@ -1088,6 +1088,7 @@
     saveThemeKey(currentThemeKey);
     syncThemeControls();
     configureMusicTracks();
+    void preloadCurrentThemeMusic();
 
     if (restartMusic && changed && !musicPlaybackActive && !isMusicMuted && state.screen === 'game' && !state.over) {
       void safePlayBackgroundMusic('Background music restart failed after theme change');
@@ -1761,6 +1762,15 @@
     return unlockIosAudio();
   }
 
+  function preloadCurrentThemeMusic() {
+    const audioContext = ensureMusicAudioContext();
+    if (!audioContext) return Promise.resolve([]);
+    return loadMusic().catch((error) => {
+      console.warn('Background music preload failed', error);
+      return [];
+    });
+  }
+
   function warmupIosPlayAudio() {
     if (!isIosSafari()) return Promise.resolve(true);
     if (iosPlayAudioWarmupPromise) return iosPlayAudioWarmupPromise;
@@ -1770,7 +1780,7 @@
       if (!unlocked) return false;
       const audioContext = await resumeMusicAudioContext();
       if (!audioContext) return false;
-      await loadMusic();
+      await preloadCurrentThemeMusic();
       clearBrowserMediaSession();
       return true;
     })()
