@@ -114,13 +114,21 @@
   // Remembers whether the current background track was actually playing
   // before the tab became hidden, so we do not auto-enable music on return.
   let musicWasPlayingBeforeHide = false;
-  let musicEnabled = readStoredAudioSetting('music', true);
-  let soundEnabled = readStoredAudioSetting('sound', true);
+  let isMusicMuted = !readStoredAudioSetting('music', true);
+  let isSoundMuted = !readStoredAudioSetting('sound', true);
   const SOUND_VOLUMES = {
     defeat: 0.3,
     victory: 1,
   };
   const MUSIC_VOLUME = 0.45;
+  const backgroundMusic = {
+    play() {
+      return playMusic();
+    },
+    pause() {
+      pauseMusic();
+    },
+  };
 
   const yandex = {
     ysdk: null,
@@ -996,16 +1004,22 @@
     applyLanguage(currentLanguage === 'ru' ? 'en' : 'ru');
   }
 
+  function safePlayBackgroundMusic(contextLabel = 'Background music playback failed') {
+    return backgroundMusic.play().catch((error) => {
+      console.warn(contextLabel, error);
+    });
+  }
+
   function syncAudioButtons() {
     if (musicToggleBtn) {
-      musicToggleBtn.classList.toggle('isOff', !musicEnabled);
-      musicToggleBtn.setAttribute('aria-label', musicEnabled ? 'Выключить музыку' : 'Включить музыку');
-      musicToggleBtn.title = musicEnabled ? 'Выключить музыку' : 'Включить музыку';
+      musicToggleBtn.classList.toggle('isOff', isMusicMuted);
+      musicToggleBtn.setAttribute('aria-label', isMusicMuted ? 'Включить музыку' : 'Выключить музыку');
+      musicToggleBtn.title = isMusicMuted ? 'Включить музыку' : 'Выключить музыку';
     }
     if (soundToggleBtn) {
-      soundToggleBtn.classList.toggle('isOff', !soundEnabled);
-      soundToggleBtn.setAttribute('aria-label', soundEnabled ? 'Выключить звуки' : 'Включить звуки');
-      soundToggleBtn.title = soundEnabled ? 'Выключить звуки' : 'Включить звуки';
+      soundToggleBtn.classList.toggle('isOff', isSoundMuted);
+      soundToggleBtn.setAttribute('aria-label', isSoundMuted ? 'Включить звуки' : 'Выключить звуки');
+      soundToggleBtn.title = isSoundMuted ? 'Включить звуки' : 'Выключить звуки';
     }
   }
 
@@ -1019,8 +1033,8 @@
     syncThemeControls();
     configureMusicTracks();
 
-    if (restartMusic && changed && !musicPlaybackActive && musicEnabled && state.screen === 'game' && !state.over) {
-      startGameMusic();
+    if (restartMusic && changed && !musicPlaybackActive && !isMusicMuted && state.screen === 'game' && !state.over) {
+      void safePlayBackgroundMusic('Background music restart failed after theme change');
     }
     if (state.screen === 'game') draw();
   }
@@ -1032,23 +1046,23 @@
   }
 
   function toggleMusic() {
-    musicEnabled = !musicEnabled;
-    saveAudioSetting('music', musicEnabled);
+    isMusicMuted = !isMusicMuted;
+    saveAudioSetting('music', !isMusicMuted);
     syncAudioButtons();
-    if (!musicEnabled) {
-      stopGameMusic();
+    if (isMusicMuted) {
+      backgroundMusic.pause();
       return;
     }
     prepareIosAudioForPlayback();
     if (state.screen === 'game' && !state.over) {
-      startGameMusic();
+      void safePlayBackgroundMusic('Background music playback failed after unmuting');
     }
   }
 
   function toggleSound() {
-    soundEnabled = !soundEnabled;
-    saveAudioSetting('sound', soundEnabled);
-    if (!soundEnabled) stopOutcomeSounds();
+    isSoundMuted = !isSoundMuted;
+    saveAudioSetting('sound', !isSoundMuted);
+    if (isSoundMuted) stopOutcomeSounds();
     syncSoundVolumes();
     syncAudioButtons();
   }
@@ -1505,7 +1519,7 @@
   }
 
   function playMilestoneVoice(milestoneKey) {
-    if (!soundEnabled || isAdAudioBlocked()) return;
+    if (isSoundMuted || isAdAudioBlocked()) return;
     const sound = milestoneSounds[milestoneKey];
     if (!sound) return;
     stopSfxSource('milestone');
@@ -1567,7 +1581,7 @@
   }
 
   function playOutcomeSound(type) {
-    if (!soundEnabled || isAdAudioBlocked()) return;
+    if (isSoundMuted || isAdAudioBlocked()) return;
     const sound = outcomeSounds[type];
     if (!sound) return;
     stopOutcomeSounds();
@@ -1687,8 +1701,8 @@
   }
 
   function prepareIosAudioForPlayback() {
-    if (!isIosSafari()) return;
-    void unlockIosAudio();
+    if (!isIosSafari()) return Promise.resolve(true);
+    return unlockIosAudio();
   }
 
   function decodeAudioDataCompat(audioContext, arrayBuffer) {
@@ -1907,7 +1921,7 @@
     currentMusicIndex = -1;
     musicPlaybackActive = false;
 
-    if (shouldResume && musicEnabled && state.screen === 'game' && !state.over) {
+    if (shouldResume && !isMusicMuted && state.screen === 'game' && !state.over) {
       startGameMusic();
     }
   }
@@ -1945,7 +1959,7 @@
     if (yandex.audioPausedForAd) return Promise.resolve();
 
     yandex.audioPausedForAd = true;
-    yandex.musicWasPlayingBeforeAd = Boolean(isMusicActuallyPlaying() && musicEnabled && musicPlaybackActive);
+    yandex.musicWasPlayingBeforeAd = Boolean(isMusicActuallyPlaying() && !isMusicMuted && musicPlaybackActive);
     stopOutcomeSounds();
 
     if (yandex.musicWasPlayingBeforeAd) {
@@ -1962,23 +1976,23 @@
   function resumeAudioAfterAd() {
     if (!yandex.audioPausedForAd) return;
 
-    const shouldResumeMusic = yandex.musicWasPlayingBeforeAd && musicEnabled && state.screen === 'game' && !state.over;
+    const shouldResumeMusic = yandex.musicWasPlayingBeforeAd && !isMusicMuted && state.screen === 'game' && !state.over;
     yandex.audioPausedForAd = false;
     yandex.musicWasPlayingBeforeAd = false;
     yandex.audioContextSuspendedForAd = false;
 
     if (shouldResumeMusic) {
-      void playMusic();
+      void safePlayBackgroundMusic('Background music resume failed after ad');
       return;
     }
 
-    if (!musicEnabled || state.screen !== 'game' || state.over) {
+    if (isMusicMuted || state.screen !== 'game' || state.over) {
       stopMusic();
     }
   }
 
   async function playMusic() {
-    if (!musicEnabled || state.over || state.screen !== 'game' || isAdAudioBlocked()) return;
+    if (isMusicMuted || state.over || state.screen !== 'game' || isAdAudioBlocked()) return;
 
     if (isIosSafari()) {
       await unlockIosAudio();
@@ -1993,7 +2007,7 @@
     if (
       playbackToken !== musicLoadToken ||
       !musicPlaybackActive ||
-      !musicEnabled ||
+      isMusicMuted ||
       state.over ||
       state.screen !== 'game' ||
       !buffers.length
@@ -2022,7 +2036,14 @@
 
     const startOffset = getSafeMusicOffset(currentBuffer, musicPauseOffset);
     musicSourceStartedAt = audioContext.currentTime - startOffset;
-    sourceNode.start(0, startOffset);
+    try {
+      sourceNode.start(0, startOffset);
+    } catch (error) {
+      if (musicSourceNode === sourceNode) musicSourceNode = null;
+      sourceNode.disconnect();
+      musicPlaybackActive = false;
+      throw error;
+    }
     clearBrowserMediaSession();
   }
 
@@ -2033,7 +2054,7 @@
   function handleDocumentVisibilityChange() {
     if (document.hidden) {
       // Pause only if music was really playing before hiding the tab.
-      musicWasPlayingBeforeHide = Boolean(isMusicActuallyPlaying() && musicEnabled && musicPlaybackActive);
+      musicWasPlayingBeforeHide = Boolean(isMusicActuallyPlaying() && !isMusicMuted && musicPlaybackActive);
       if (musicWasPlayingBeforeHide) {
         pauseMusic();
       }
@@ -2047,34 +2068,28 @@
 
     // Resume only when the player did not mute music manually and the game
     // is still in a state where music is supposed to be active.
-    if (!musicWasPlayingBeforeHide || !musicEnabled || state.over || state.screen !== 'game') {
+    if (!musicWasPlayingBeforeHide || isMusicMuted || state.over || state.screen !== 'game') {
       musicWasPlayingBeforeHide = false;
       return;
     }
 
     musicWasPlayingBeforeHide = false;
-    void playMusic();
+    void safePlayBackgroundMusic('Background music resume failed after tab became visible');
   }
 
   function startGameMusic() {
     stopMusic();
-    if (!musicEnabled) return;
-    void playMusic();
+    if (isMusicMuted) return;
+    void safePlayBackgroundMusic();
   }
 
   function installIosAudioUnlockHandlers() {
-    if (!isIosSafari()) return;
-
-    const unlockOnGesture = () => {
-      void unlockIosAudio().then((unlocked) => {
-        if (!unlocked) return;
-        document.removeEventListener('touchstart', unlockOnGesture, true);
-        document.removeEventListener('pointerdown', unlockOnGesture, true);
-      });
+    if (!isIosSafari() || !playBtn) return;
+    const unlockOnPlayGesture = () => {
+      void prepareIosAudioForPlayback();
     };
-
-    document.addEventListener('touchstart', unlockOnGesture, { passive: true, capture: true });
-    document.addEventListener('pointerdown', unlockOnGesture, { passive: true, capture: true });
+    playBtn.addEventListener('touchstart', unlockOnPlayGesture, { passive: true });
+    playBtn.addEventListener('pointerdown', unlockOnPlayGesture, { passive: true });
   }
 
   function startTimer() {
@@ -2303,9 +2318,21 @@
 
   function startSelectedGame() {
     const selection = getSelection();
-    prepareIosAudioForPlayback();
+    void prepareIosAudioForPlayback();
     showGame();
     newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset);
+  }
+
+  let playButtonStartLocked = false;
+
+  function handlePlayButtonPress(event) {
+    if (event?.type === 'touchend') event.preventDefault();
+    if (playButtonStartLocked) return;
+    playButtonStartLocked = true;
+    startSelectedGame();
+    window.setTimeout(() => {
+      playButtonStartLocked = false;
+    }, 0);
   }
 
   function restartSameSettings() {
@@ -2861,14 +2888,14 @@
 
   function syncAudioButtons() {
     if (musicToggleBtn) {
-      musicToggleBtn.classList.toggle('isOff', !musicEnabled);
-      musicToggleBtn.setAttribute('aria-label', musicEnabled ? t('music_off') : t('music_on'));
-      musicToggleBtn.title = musicEnabled ? t('music_off') : t('music_on');
+      musicToggleBtn.classList.toggle('isOff', isMusicMuted);
+      musicToggleBtn.setAttribute('aria-label', isMusicMuted ? t('music_on') : t('music_off'));
+      musicToggleBtn.title = isMusicMuted ? t('music_on') : t('music_off');
     }
     if (soundToggleBtn) {
-      soundToggleBtn.classList.toggle('isOff', !soundEnabled);
-      soundToggleBtn.setAttribute('aria-label', soundEnabled ? t('sound_off') : t('sound_on'));
-      soundToggleBtn.title = soundEnabled ? t('sound_off') : t('sound_on');
+      soundToggleBtn.classList.toggle('isOff', isSoundMuted);
+      soundToggleBtn.setAttribute('aria-label', isSoundMuted ? t('sound_on') : t('sound_off'));
+      soundToggleBtn.title = isSoundMuted ? t('sound_on') : t('sound_off');
     }
   }
 
@@ -3088,7 +3115,10 @@
 
   faceBtn.addEventListener('click', restartSameSettings);
   if (hintBtn) hintBtn.addEventListener('click', startHintMode);
-  if (playBtn) playBtn.addEventListener('click', startSelectedGame);
+  if (playBtn) {
+    playBtn.addEventListener('click', handlePlayButtonPress);
+    playBtn.addEventListener('touchend', handlePlayButtonPress, { passive: false });
+  }
   if (menuBtn) menuBtn.addEventListener('click', showMenu);
   if (languageToggleBtn) languageToggleBtn.addEventListener('click', toggleLanguage);
   if (musicToggleBtn) musicToggleBtn.addEventListener('click', toggleMusic);
