@@ -39,6 +39,8 @@
   const milestonePopupImage = document.getElementById('milestonePopupImage');
   const audioEnableOverlay = document.getElementById('audioEnableOverlay');
   const audioEnableOverlayText = document.getElementById('audioEnableOverlayText');
+  const audioEnableYesBtn = document.getElementById('audioEnableYesBtn');
+  const audioEnableNoBtn = document.getElementById('audioEnableNoBtn');
 
   const victoryModal = document.getElementById('victoryModal');
   const victoryClose = document.getElementById('victoryClose');
@@ -123,7 +125,7 @@
   // Remembers whether the current background track was actually playing
   // before the tab became hidden, so we do not auto-enable music on return.
   let musicWasPlayingBeforeHide = false;
-  let isMusicMuted = true;
+  let isMusicMuted = !readStoredAudioSetting('music', true);
   let isSoundMuted = !readStoredAudioSetting('sound', true);
   const SOUND_VOLUMES = {
     defeat: 0.3,
@@ -1089,7 +1091,9 @@
     );
 
     audioEnableOverlay.hidden = !shouldShow;
-    audioEnableOverlayText.textContent = getAudioEnableOverlayLabel();
+    audioEnableOverlayText.textContent = currentLanguage === 'en' ? 'Enable music?' : 'Включить музыку?';
+    if (audioEnableYesBtn) audioEnableYesBtn.textContent = currentLanguage === 'en' ? 'Yes' : 'Да';
+    if (audioEnableNoBtn) audioEnableNoBtn.textContent = currentLanguage === 'en' ? 'No' : 'Нет';
   }
 
   function safePlayBackgroundMusic(contextLabel = 'Background music playback failed') {
@@ -1184,6 +1188,15 @@
     }
   }
 
+  function declineAudioEnableOverlay() {
+    state.audioEnablePending = false;
+    isMusicMuted = true;
+    saveAudioSetting('music', false);
+    syncAudioButtons();
+    syncAudioEnableOverlay();
+    backgroundMusic.pause();
+  }
+
   function syncAudioButtons() {
     if (musicToggleBtn) {
       musicToggleBtn.classList.toggle('isOff', isMusicMuted);
@@ -1233,7 +1246,6 @@
     if (isIosSafari() && shouldMusicBePlayableNow()) {
       state.audioEnablePending = true;
       syncAudioEnableOverlay();
-      void warmupIosPlayAudio();
       return;
     }
     if (shouldMusicBePlayableNow()) {
@@ -1447,6 +1459,9 @@
   function showGame() {
     state.screen = 'game';
     document.body.classList.add('inGame');
+    if (isIosSafari()) {
+      state.audioEnablePending = !isMusicMuted;
+    }
     syncMobileViewportState();
     tryLockLandscape();
     initYandexSdk();
@@ -3642,12 +3657,15 @@
   if (menuBtn) menuBtn.addEventListener('click', showMenu);
   if (languageToggleBtn) languageToggleBtn.addEventListener('click', toggleLanguage);
   if (musicToggleBtn) musicToggleBtn.addEventListener('click', toggleMusic);
-  if (audioEnableOverlay) {
-    audioEnableOverlay.addEventListener('click', () => {
+  if (audioEnableYesBtn) {
+    audioEnableYesBtn.addEventListener('click', () => {
       void handleAudioEnableOverlayClick().catch((error) => {
         console.warn('Audio enable overlay failed', error);
       });
     });
+  }
+  if (audioEnableNoBtn) {
+    audioEnableNoBtn.addEventListener('click', declineAudioEnableOverlay);
   }
   if (soundToggleBtn) soundToggleBtn.addEventListener('click', toggleSound);
   if (themeCycleBtn) themeCycleBtn.addEventListener('click', cycleTheme);
