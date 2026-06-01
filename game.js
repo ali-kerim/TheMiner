@@ -134,6 +134,7 @@
     ysdk: null,
     player: null,
     initPromise: null,
+    scriptPromise: null,
     playerPromise: null,
     loadingReadySent: false,
     adShowing: false,
@@ -379,15 +380,47 @@
     },
   };
 
-  function initYandexSdk() {
-    if (yandex.initPromise) return yandex.initPromise;
-    if (!isYandexGamesRuntime()) {
-      yandex.initPromise = Promise.resolve(null);
-      return yandex.initPromise;
+  function loadYandexSdkScript() {
+    if (yandex.scriptPromise) return yandex.scriptPromise;
+    if (!isEmbeddedRuntime()) {
+      yandex.scriptPromise = Promise.resolve(null);
+      return yandex.scriptPromise;
+    }
+    if (window.YaGames && typeof window.YaGames.init === 'function') {
+      yandex.scriptPromise = Promise.resolve(window.YaGames);
+      return yandex.scriptPromise;
     }
 
-    yandex.initPromise = window.YaGames.init()
+    yandex.scriptPromise = new Promise((resolve) => {
+      const existingScript = document.querySelector('script[data-yandex-games-sdk="true"]');
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve(window.YaGames || null), { once: true });
+        existingScript.addEventListener('error', () => resolve(null), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://yandex.ru/games/sdk/v2';
+      script.async = true;
+      script.dataset.yandexGamesSdk = 'true';
+      script.addEventListener('load', () => resolve(window.YaGames || null), { once: true });
+      script.addEventListener('error', () => resolve(null), { once: true });
+      document.head.appendChild(script);
+    });
+
+    return yandex.scriptPromise;
+  }
+
+  function initYandexSdk() {
+    if (yandex.initPromise) return yandex.initPromise;
+
+    yandex.initPromise = loadYandexSdkScript()
+      .then(() => {
+        if (!isYandexGamesRuntime()) return null;
+        return window.YaGames.init();
+      })
       .then((ysdk) => {
+        if (!ysdk) return null;
         yandex.ysdk = ysdk;
         syncLanguageFromYandex(ysdk);
         notifyGameReady();
@@ -424,9 +457,17 @@
     return isMobileDevice() && window.innerHeight > window.innerWidth;
   }
 
+  function isEmbeddedRuntime() {
+    try {
+      return window.parent !== window;
+    } catch (error) {
+      return false;
+    }
+  }
+
   function isYandexGamesRuntime() {
     try {
-      return window.parent !== window && !!window.YaGames && typeof window.YaGames.init === 'function';
+      return isEmbeddedRuntime() && !!window.YaGames && typeof window.YaGames.init === 'function';
     } catch (error) {
       return false;
     }
