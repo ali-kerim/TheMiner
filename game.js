@@ -121,7 +121,7 @@
   // Remembers whether the current background track was actually playing
   // before the tab became hidden, so we do not auto-enable music on return.
   let musicWasPlayingBeforeHide = false;
-  let isMusicMuted = !readStoredAudioSetting('music', true);
+  let isMusicMuted = true;
   let isSoundMuted = !readStoredAudioSetting('sound', true);
   const SOUND_VOLUMES = {
     defeat: 0.3,
