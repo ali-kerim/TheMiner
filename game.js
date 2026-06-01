@@ -1657,6 +1657,10 @@
   }
 
   function shouldUseIosHtmlAudioFallback() {
+    return false;
+  }
+
+  function shouldUseIosHtmlAudioUnlock() {
     return isIosSafari();
   }
 
@@ -1883,7 +1887,7 @@
     if (iosAudioUnlocked) return Promise.resolve(true);
     if (iosAudioUnlockPromise) return iosAudioUnlockPromise;
 
-    if (shouldUseIosHtmlAudioFallback()) {
+    if (shouldUseIosHtmlAudioUnlock()) {
       iosAudioUnlockPromise = Promise.resolve()
         .then(() => {
           const unlockAudio = ensureIosUnlockAudio();
@@ -1891,10 +1895,16 @@
           return unlockAudio.play().then(() => {
             unlockAudio.pause();
             unlockAudio.currentTime = 0;
-            iosAudioUnlocked = true;
-            clearBrowserMediaSession();
-            return true;
+            return resumeMusicAudioContext().then((audioContext) => {
+              if (!audioContext) return false;
+              return primeMusicAudioContext(audioContext).then(() => audioContext.state === 'running');
+            });
           });
+        })
+        .then((unlocked) => {
+          iosAudioUnlocked = Boolean(unlocked);
+          clearBrowserMediaSession();
+          return iosAudioUnlocked;
         })
         .catch((err) => {
           console.warn('iOS audio unlock failed', err);
