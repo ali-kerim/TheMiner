@@ -1661,7 +1661,7 @@
   }
 
   function shouldUseIosHtmlAudioUnlock() {
-    return isIosSafari();
+    return false;
   }
 
   function createInlineAudio(src = '') {
@@ -2364,7 +2364,7 @@
     clearBrowserMediaSession();
   }
 
-  function tryStartGameMusicFromGesture() {
+  function tryStartGameMusicFromGesture(allowBeforeStart = false) {
     if (shouldUseIosHtmlAudioFallback()) {
       const audio = configureIosBackgroundTrack();
       if (!audio || isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return false;
@@ -2388,7 +2388,9 @@
       }
     }
 
-    if (isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return false;
+    if (isMusicMuted || isAdAudioBlocked()) return false;
+    if (!allowBeforeStart && !shouldMusicBeActive()) return false;
+    if (allowBeforeStart && (state.screen !== 'game' || state.over)) return false;
 
     const audioContext = ensureMusicAudioContext();
     if (!audioContext || audioContext.state !== 'running' || !musicGainNode || !musicBuffers.length) {
@@ -3185,15 +3187,18 @@
   canvas.addEventListener('pointerdown', (e) => {
     if (state.screen !== 'game') return;
     if (!(e.pointerType === 'mouse' || e.pointerType === 'touch' || e.pointerType === 'pen')) return;
+    const c = toCell(e.clientX, e.clientY);
     if (isIosSafari() && !state.started && !state.over) {
       void warmupIosPlayAudio();
+      if (c && !state.hintMode && !isMusicMuted && !isMusicActuallyPlaying()) {
+        tryStartGameMusicFromGesture(true);
+      }
     }
     canvas.setPointerCapture(e.pointerId);
     state.pointerDown = true;
     state.longPressFired = false;
     setFace('😮');
 
-    const c = toCell(e.clientX, e.clientY);
     state.downCell = c;
 
     if (e.pointerType !== 'mouse' && c && !state.hintMode) {
