@@ -37,6 +37,8 @@
   const panelEl = document.querySelector('.panel');
   const milestonePopup = document.getElementById('milestonePopup');
   const milestonePopupImage = document.getElementById('milestonePopupImage');
+  const audioEnableOverlay = document.getElementById('audioEnableOverlay');
+  const audioEnableOverlayText = document.getElementById('audioEnableOverlayText');
 
   const victoryModal = document.getElementById('victoryModal');
   const victoryClose = document.getElementById('victoryClose');
@@ -817,6 +819,7 @@
     milestoneTimeoutId: /** @type {number | null} */ (null),
     lossContinueUsed: false,
     lossContinuePending: false,
+    audioEnablePending: false,
 
     currentPreset: 'beginner',
     currentRecordKey: 'beginner',
@@ -1052,6 +1055,7 @@
     applyLanguageToDom();
     syncThemeControls();
     syncAudioButtons();
+    syncAudioEnableOverlay();
     syncLanguageButton();
     if (!state.hintAdPending && !state.hintMode) setHintText(t('hint_after_ad'));
     if (refreshRecords && recordsModal && !recordsModal.hidden) showRecordsModal();
@@ -1065,6 +1069,27 @@
 
   function toggleLanguage() {
     applyLanguage(currentLanguage === 'ru' ? 'en' : 'ru');
+  }
+
+  function getAudioEnableOverlayLabel() {
+    return currentLanguage === 'en'
+      ? 'Tap the screen to enable music'
+      : 'Нажмите по экрану, чтобы включить музыку';
+  }
+
+  function syncAudioEnableOverlay() {
+    if (!audioEnableOverlay || !audioEnableOverlayText) return;
+
+    const shouldShow = Boolean(
+      state.audioEnablePending &&
+      isIosSafari() &&
+      !isMusicMuted &&
+      state.screen === 'game' &&
+      !state.over
+    );
+
+    audioEnableOverlay.hidden = !shouldShow;
+    audioEnableOverlayText.textContent = getAudioEnableOverlayLabel();
   }
 
   function safePlayBackgroundMusic(contextLabel = 'Background music playback failed') {
@@ -1140,6 +1165,25 @@
     clearBrowserMediaSession();
   }
 
+  async function handleAudioEnableOverlayClick() {
+    if (!state.audioEnablePending || isMusicMuted || !isIosSafari()) return;
+
+    const unlocked = await prepareIosAudioForPlayback();
+    if (!unlocked) return;
+
+    await preloadCurrentThemeMusic();
+
+    const started = tryStartGameMusicFromGesture(true);
+    if (!started) {
+      await startMusicFromToggle();
+    }
+
+    if (isMusicActuallyPlaying() || musicPlaybackActive) {
+      state.audioEnablePending = false;
+      syncAudioEnableOverlay();
+    }
+  }
+
   function syncAudioButtons() {
     if (musicToggleBtn) {
       musicToggleBtn.classList.toggle('isOff', isMusicMuted);
@@ -1179,9 +1223,17 @@
   function toggleMusic() {
     isMusicMuted = !isMusicMuted;
     saveAudioSetting('music', !isMusicMuted);
+    if (isMusicMuted) state.audioEnablePending = false;
     syncAudioButtons();
+    syncAudioEnableOverlay();
     if (isMusicMuted) {
       backgroundMusic.pause();
+      return;
+    }
+    if (isIosSafari() && shouldMusicBePlayableNow()) {
+      state.audioEnablePending = true;
+      syncAudioEnableOverlay();
+      void warmupIosPlayAudio();
       return;
     }
     if (shouldMusicBePlayableNow()) {
@@ -1376,6 +1428,7 @@
 
   function showMenu() {
     state.screen = 'menu';
+    state.audioEnablePending = false;
     document.body.classList.remove('inGame');
     syncMobileViewportState();
     hideMilestonePopup();
@@ -1388,6 +1441,7 @@
     hideRecordsModal();
     menuScreen.hidden = false;
     gameScreen.hidden = true;
+    syncAudioEnableOverlay();
   }
 
   function showGame() {
@@ -1398,6 +1452,7 @@
     initYandexSdk();
     menuScreen.hidden = true;
     gameScreen.hidden = false;
+    syncAudioEnableOverlay();
     requestAnimationFrame(() => {
       resize();
       draw();
@@ -1725,7 +1780,7 @@
   }
 
   function shouldUseIosHtmlAudioUnlock() {
-    return isIosSafari();
+    return false;
   }
 
   function createInlineAudio(src = '') {
@@ -2724,6 +2779,8 @@
         showLossModal();
       }, 520);
     }
+    state.audioEnablePending = false;
+    syncAudioEnableOverlay();
     updateCounters();
   }
 
@@ -2774,6 +2831,7 @@
 
   function startSelectedGame() {
     const selection = getSelection();
+    state.audioEnablePending = false;
     showGame();
     newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset);
   }
@@ -3584,6 +3642,13 @@
   if (menuBtn) menuBtn.addEventListener('click', showMenu);
   if (languageToggleBtn) languageToggleBtn.addEventListener('click', toggleLanguage);
   if (musicToggleBtn) musicToggleBtn.addEventListener('click', toggleMusic);
+  if (audioEnableOverlay) {
+    audioEnableOverlay.addEventListener('click', () => {
+      void handleAudioEnableOverlayClick().catch((error) => {
+        console.warn('Audio enable overlay failed', error);
+      });
+    });
+  }
   if (soundToggleBtn) soundToggleBtn.addEventListener('click', toggleSound);
   if (themeCycleBtn) themeCycleBtn.addEventListener('click', cycleTheme);
   if (recordsBtn) recordsBtn.addEventListener('click', showRecordsModal);
