@@ -1066,6 +1066,10 @@
     });
   }
 
+  function shouldMusicBeActive() {
+    return state.screen === 'game' && state.started && !state.over;
+  }
+
   function syncAudioButtons() {
     if (musicToggleBtn) {
       musicToggleBtn.classList.toggle('isOff', isMusicMuted);
@@ -1090,7 +1094,7 @@
     configureMusicTracks();
     void preloadCurrentThemeMusic();
 
-    if (restartMusic && changed && !musicPlaybackActive && !isMusicMuted && state.screen === 'game' && !state.over) {
+    if (restartMusic && changed && !musicPlaybackActive && !isMusicMuted && shouldMusicBeActive()) {
       void safePlayBackgroundMusic('Background music restart failed after theme change');
     }
     if (state.screen === 'game') draw();
@@ -1111,7 +1115,7 @@
       return;
     }
     prepareIosAudioForPlayback();
-    if (state.screen === 'game' && !state.over) {
+    if (shouldMusicBeActive()) {
       void safePlayBackgroundMusic('Background music playback failed after unmuting');
     }
   }
@@ -2011,7 +2015,7 @@
     currentMusicIndex = -1;
     musicPlaybackActive = false;
 
-    if (shouldResume && !isMusicMuted && state.screen === 'game' && !state.over) {
+    if (shouldResume && !isMusicMuted && shouldMusicBeActive()) {
       startGameMusic();
     }
   }
@@ -2066,7 +2070,7 @@
   function resumeAudioAfterAd() {
     if (!yandex.audioPausedForAd) return;
 
-    const shouldResumeMusic = yandex.musicWasPlayingBeforeAd && !isMusicMuted && state.screen === 'game' && !state.over;
+    const shouldResumeMusic = yandex.musicWasPlayingBeforeAd && !isMusicMuted && shouldMusicBeActive();
     yandex.audioPausedForAd = false;
     yandex.musicWasPlayingBeforeAd = false;
     yandex.audioContextSuspendedForAd = false;
@@ -2076,13 +2080,13 @@
       return;
     }
 
-    if (isMusicMuted || state.screen !== 'game' || state.over) {
+    if (isMusicMuted || !shouldMusicBeActive()) {
       stopMusic();
     }
   }
 
   async function playMusic() {
-    if (isMusicMuted || state.over || state.screen !== 'game' || isAdAudioBlocked()) return;
+    if (isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return;
 
     if (isIosSafari()) {
       await unlockIosAudio();
@@ -2098,8 +2102,7 @@
       playbackToken !== musicLoadToken ||
       !musicPlaybackActive ||
       isMusicMuted ||
-      state.over ||
-      state.screen !== 'game' ||
+      !shouldMusicBeActive() ||
       !buffers.length
     ) {
       return;
@@ -2158,7 +2161,7 @@
 
     // Resume only when the player did not mute music manually and the game
     // is still in a state where music is supposed to be active.
-    if (!musicWasPlayingBeforeHide || isMusicMuted || state.over || state.screen !== 'game') {
+    if (!musicWasPlayingBeforeHide || isMusicMuted || !shouldMusicBeActive()) {
       musicWasPlayingBeforeHide = false;
       return;
     }
@@ -2169,7 +2172,7 @@
 
   function startGameMusic() {
     stopMusic();
-    if (isMusicMuted) return;
+    if (isMusicMuted || !shouldMusicBeActive()) return;
     void safePlayBackgroundMusic();
   }
 
@@ -2258,6 +2261,7 @@
       startTimer();
       setFace('😮');
       ensureMinesPlaced(x, y);
+      startGameMusic();
     }
 
     c.revealed = true;
@@ -2367,8 +2371,7 @@
     if (state.revealed >= safeCells) gameOver(true);
   }
 
-  function newGame(w, h, m, recordKey, presetKey, options = {}) {
-    const deferMusicStart = Boolean(options.deferMusicStart);
+  function newGame(w, h, m, recordKey, presetKey) {
     stopGameplayMarkup();
     state.w = clamp(w | 0, 5, 60);
     state.h = clamp(h | 0, 5, 40);
@@ -2403,16 +2406,13 @@
     hideLossModal();
     resize();
     draw();
-    if (!deferMusicStart) startGameMusic();
     showNewGameAd();
   }
 
-  function startSelectedGame(options = {}) {
+  function startSelectedGame() {
     const selection = getSelection();
-    const deferMusicStart = Boolean(options.deferMusicStart);
-    if (!deferMusicStart) void prepareIosAudioForPlayback();
     showGame();
-    newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset, { deferMusicStart });
+    newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset);
   }
 
   let playButtonStartLocked = false;
@@ -2420,15 +2420,10 @@
   function handlePlayButtonPress() {
     if (playButtonStartLocked) return;
     playButtonStartLocked = true;
-    const shouldDeferMusicStartForIos = isIosSafari() && !isMusicMuted;
-    const iosWarmupPromise = shouldDeferMusicStartForIos ? warmupIosPlayAudio() : null;
-    startSelectedGame({ deferMusicStart: shouldDeferMusicStartForIos });
-    if (iosWarmupPromise) {
-      void iosWarmupPromise.then((ready) => {
-        if (!ready || isMusicMuted || state.screen !== 'game' || state.over || isMusicActuallyPlaying()) return;
-        return safePlayBackgroundMusic('iOS background music start failed after Play warmup');
-      });
+    if (isIosSafari() && !isMusicMuted) {
+      void warmupIosPlayAudio();
     }
+    startSelectedGame();
     window.setTimeout(() => {
       playButtonStartLocked = false;
     }, 700);
