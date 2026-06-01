@@ -1725,7 +1725,7 @@
   }
 
   function shouldUseIosHtmlAudioUnlock() {
-    return false;
+    return isIosSafari();
   }
 
   function createInlineAudio(src = '') {
