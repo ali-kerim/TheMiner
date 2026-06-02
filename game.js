@@ -1051,7 +1051,6 @@
     applyLanguageToDom();
     syncThemeControls();
     syncAudioButtons();
-    if (isMusicActuallyPlaying()) syncBrowserMediaSession();
     syncLanguageButton();
     if (!state.hintAdPending && !state.hintMode) setHintText(t('hint_after_ad'));
     if (refreshRecords && recordsModal && !recordsModal.hidden) showRecordsModal();
@@ -1168,7 +1167,6 @@
     syncThemeControls();
     configureMusicTracks();
     void preloadCurrentThemeMusic();
-    if (isMusicActuallyPlaying()) syncBrowserMediaSession();
 
     if (restartMusic && changed && !musicPlaybackActive && !isMusicMuted && shouldMusicBeActive()) {
       void safePlayBackgroundMusic('Background music restart failed after theme change');
@@ -1727,11 +1725,11 @@
   }
 
   function shouldUseIosHtmlAudioFallback() {
-    return true;
+    return false;
   }
 
   function shouldUseIosHtmlAudioUnlock() {
-    return true;
+    return false;
   }
 
   function createInlineAudio(src = '') {
@@ -1757,18 +1755,6 @@
       iosBackgroundAudio = createInlineAudio();
       iosBackgroundAudio.loop = true;
       iosBackgroundAudio.volume = MUSIC_VOLUME;
-      iosBackgroundAudio.addEventListener('play', () => {
-        musicPlaybackActive = true;
-        syncBrowserMediaSession();
-      });
-      iosBackgroundAudio.addEventListener('pause', () => {
-        musicPlaybackActive = false;
-        clearBrowserMediaSession();
-      });
-      iosBackgroundAudio.addEventListener('ended', () => {
-        musicPlaybackActive = false;
-        clearBrowserMediaSession();
-      });
     }
     return iosBackgroundAudio;
   }
@@ -1862,9 +1848,7 @@
           musicPlaybackActive = false;
           return;
         }
-        return audio.play().then(() => {
-          syncBrowserMediaSession();
-        }).catch((error) => {
+        return audio.play().catch((error) => {
           musicPlaybackActive = false;
           throw error;
         });
@@ -1942,39 +1926,6 @@
         mediaSession.setActionHandler(action, null);
       } catch {}
     });
-  }
-
-  function syncBrowserMediaSession() {
-    const mediaSession = navigator.mediaSession;
-    if (!mediaSession || typeof MediaMetadata === 'undefined') return;
-
-    try {
-      mediaSession.metadata = new MediaMetadata({
-        title: t('app_name'),
-        artist: getThemeLabel(currentThemeKey),
-        album: boardLabel(),
-      });
-    } catch {}
-
-    try {
-      mediaSession.playbackState = isMusicActuallyPlaying() ? 'playing' : 'paused';
-    } catch {}
-
-    try {
-      mediaSession.setActionHandler('play', () => {
-        void backgroundMusic.play();
-      });
-    } catch {}
-    try {
-      mediaSession.setActionHandler('pause', () => {
-        backgroundMusic.pause();
-      });
-    } catch {}
-    try {
-      mediaSession.setActionHandler('stop', () => {
-        stopMusic();
-      });
-    } catch {}
   }
 
   function primeMusicAudioContext(audioContext) {
@@ -2832,9 +2783,9 @@
   function handlePlayButtonPress() {
     if (playButtonStartLocked) return;
     playButtonStartLocked = true;
-    if (!isMusicMuted) {
+    if (!isMusicMuted || !isSoundMuted) {
       void unlockIosAudio();
-      void preloadCurrentThemeMusic();
+      if (!isMusicMuted) void preloadCurrentThemeMusic();
     }
     startSelectedGame();
     window.setTimeout(() => {
