@@ -661,49 +661,6 @@ body.needsLandscape .rotateNotice{
   object-fit:contain;
 }
 
-.audioEnableOverlay[hidden]{
-  display:none !important;
-}
-.audioEnableOverlay{
-  position:absolute;
-  inset:0;
-  z-index:9;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:20px;
-  background:linear-gradient(180deg, rgba(7,8,12,.32), rgba(7,8,12,.68));
-  backdrop-filter:blur(8px);
-}
-.audioEnableCard{
-  width:min(360px, 100%);
-  padding:22px 18px 18px;
-  border-radius:20px;
-  border:1px solid rgba(255,255,255,.16);
-  background:linear-gradient(180deg, rgba(19,24,37,.96), rgba(10,13,22,.96));
-  color:var(--text);
-  text-align:center;
-  box-shadow:0 22px 44px rgba(0,0,0,.34);
-}
-.audioEnableOverlayText{
-  display:block;
-  max-width:300px;
-  margin:0 auto;
-  font-size:17px;
-  line-height:1.4;
-  font-weight:800;
-  text-shadow:0 1px 10px rgba(0,0,0,.4);
-}
-.audioEnableActions{
-  display:flex;
-  justify-content:center;
-  gap:10px;
-  margin-top:18px;
-}
-.audioEnableActions .btn{
-  min-width:112px;
-}
-
 .hint{
   position:absolute;
   inset:auto 12px 12px 12px;

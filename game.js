@@ -37,11 +37,6 @@
   const panelEl = document.querySelector('.panel');
   const milestonePopup = document.getElementById('milestonePopup');
   const milestonePopupImage = document.getElementById('milestonePopupImage');
-  const audioEnableOverlay = document.getElementById('audioEnableOverlay');
-  const audioEnableOverlayText = document.getElementById('audioEnableOverlayText');
-  const audioEnableYesBtn = document.getElementById('audioEnableYesBtn');
-  const audioEnableNoBtn = document.getElementById('audioEnableNoBtn');
-
   const victoryModal = document.getElementById('victoryModal');
   const victoryClose = document.getElementById('victoryClose');
   const victoryAgain = document.getElementById('victoryAgain');
@@ -111,7 +106,6 @@
   let musicSourceStartedAt = 0;
   let musicPauseOffset = 0;
   let musicLoadToken = 0;
-  let audioEnableYesGestureHandled = false;
   let currentMusicThemeCacheKey = '';
   const sfxBufferCache = new Map();
   let iosAudioUnlocked = false;
@@ -822,7 +816,6 @@
     milestoneTimeoutId: /** @type {number | null} */ (null),
     lossContinueUsed: false,
     lossContinuePending: false,
-    audioEnablePending: false,
 
     currentPreset: 'beginner',
     currentRecordKey: 'beginner',
@@ -1058,7 +1051,7 @@
     applyLanguageToDom();
     syncThemeControls();
     syncAudioButtons();
-    syncAudioEnableOverlay();
+    if (isMusicActuallyPlaying()) syncBrowserMediaSession();
     syncLanguageButton();
     if (!state.hintAdPending && !state.hintMode) setHintText(t('hint_after_ad'));
     if (refreshRecords && recordsModal && !recordsModal.hidden) showRecordsModal();
@@ -1072,29 +1065,6 @@
 
   function toggleLanguage() {
     applyLanguage(currentLanguage === 'ru' ? 'en' : 'ru');
-  }
-
-  function getAudioEnableOverlayLabel() {
-    return currentLanguage === 'en'
-      ? 'Tap the screen to enable music'
-      : 'Нажмите по экрану, чтобы включить музыку';
-  }
-
-  function syncAudioEnableOverlay() {
-    if (!audioEnableOverlay || !audioEnableOverlayText) return;
-
-    const shouldShow = Boolean(
-      state.audioEnablePending &&
-      isIosSafari() &&
-      !isMusicMuted &&
-      state.screen === 'game' &&
-      !state.over
-    );
-
-    audioEnableOverlay.hidden = !shouldShow;
-    audioEnableOverlayText.textContent = currentLanguage === 'en' ? 'Enable music?' : 'Включить музыку?';
-    if (audioEnableYesBtn) audioEnableYesBtn.textContent = currentLanguage === 'en' ? 'Yes' : 'Да';
-    if (audioEnableNoBtn) audioEnableNoBtn.textContent = currentLanguage === 'en' ? 'No' : 'Нет';
   }
 
   function safePlayBackgroundMusic(contextLabel = 'Background music playback failed') {
@@ -1113,6 +1083,12 @@
 
   async function startMusicFromToggle() {
     if (isMusicMuted || !shouldMusicBePlayableNow() || isAdAudioBlocked()) return;
+
+    if (shouldUseIosHtmlAudioFallback()) {
+      await preloadCurrentThemeMusic();
+      await playIosBackgroundMusic();
+      return;
+    }
 
     if (isIosSafari()) {
       const unlocked = await prepareIosAudioForPlayback();
@@ -1169,49 +1145,6 @@
 
     clearBrowserMediaSession();
   }
-
-  async function handleAudioEnableOverlayClick() {
-    if (!state.audioEnablePending || isMusicMuted || !isIosSafari()) return;
-
-    const unlocked = await prepareIosAudioForPlayback();
-    if (!unlocked) return;
-
-    await preloadCurrentThemeMusic();
-
-    const started = tryStartGameMusicFromGesture(true);
-    if (!started) {
-      await startMusicFromToggle();
-    }
-
-    if (isMusicActuallyPlaying() || musicPlaybackActive) {
-      state.audioEnablePending = false;
-      syncAudioEnableOverlay();
-    }
-  }
-
-  function handleAudioEnableYesGesture(event) {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    if (audioEnableYesGestureHandled) return;
-    audioEnableYesGestureHandled = true;
-    void handleAudioEnableOverlayClick().catch((error) => {
-      console.warn('Audio enable overlay failed', error);
-    }).finally(() => {
-      audioEnableYesGestureHandled = false;
-    });
-  }
-
-  function declineAudioEnableOverlay() {
-    state.audioEnablePending = false;
-    isMusicMuted = true;
-    saveAudioSetting('music', false);
-    syncAudioButtons();
-    syncAudioEnableOverlay();
-    backgroundMusic.pause();
-  }
-
   function syncAudioButtons() {
     if (musicToggleBtn) {
       musicToggleBtn.classList.toggle('isOff', isMusicMuted);
@@ -1235,6 +1168,7 @@
     syncThemeControls();
     configureMusicTracks();
     void preloadCurrentThemeMusic();
+    if (isMusicActuallyPlaying()) syncBrowserMediaSession();
 
     if (restartMusic && changed && !musicPlaybackActive && !isMusicMuted && shouldMusicBeActive()) {
       void safePlayBackgroundMusic('Background music restart failed after theme change');
@@ -1251,16 +1185,9 @@
   function toggleMusic() {
     isMusicMuted = !isMusicMuted;
     saveAudioSetting('music', !isMusicMuted);
-    if (isMusicMuted) state.audioEnablePending = false;
     syncAudioButtons();
-    syncAudioEnableOverlay();
     if (isMusicMuted) {
       backgroundMusic.pause();
-      return;
-    }
-    if (isIosSafari() && shouldMusicBePlayableNow()) {
-      state.audioEnablePending = true;
-      syncAudioEnableOverlay();
       return;
     }
     if (shouldMusicBePlayableNow()) {
@@ -1455,7 +1382,6 @@
 
   function showMenu() {
     state.screen = 'menu';
-    state.audioEnablePending = false;
     document.body.classList.remove('inGame');
     syncMobileViewportState();
     hideMilestonePopup();
@@ -1468,21 +1394,16 @@
     hideRecordsModal();
     menuScreen.hidden = false;
     gameScreen.hidden = true;
-    syncAudioEnableOverlay();
   }
 
   function showGame() {
     state.screen = 'game';
     document.body.classList.add('inGame');
-    if (isIosSafari()) {
-      state.audioEnablePending = !isMusicMuted;
-    }
     syncMobileViewportState();
     tryLockLandscape();
     initYandexSdk();
     menuScreen.hidden = true;
     gameScreen.hidden = false;
-    syncAudioEnableOverlay();
     requestAnimationFrame(() => {
       resize();
       draw();
@@ -1806,11 +1727,11 @@
   }
 
   function shouldUseIosHtmlAudioFallback() {
-    return false;
+    return true;
   }
 
   function shouldUseIosHtmlAudioUnlock() {
-    return false;
+    return true;
   }
 
   function createInlineAudio(src = '') {
@@ -1836,6 +1757,18 @@
       iosBackgroundAudio = createInlineAudio();
       iosBackgroundAudio.loop = true;
       iosBackgroundAudio.volume = MUSIC_VOLUME;
+      iosBackgroundAudio.addEventListener('play', () => {
+        musicPlaybackActive = true;
+        syncBrowserMediaSession();
+      });
+      iosBackgroundAudio.addEventListener('pause', () => {
+        musicPlaybackActive = false;
+        clearBrowserMediaSession();
+      });
+      iosBackgroundAudio.addEventListener('ended', () => {
+        musicPlaybackActive = false;
+        clearBrowserMediaSession();
+      });
     }
     return iosBackgroundAudio;
   }
@@ -1907,9 +1840,7 @@
 
         audio.addEventListener('ended', cleanup, { once: true });
         audio.addEventListener('pause', cleanup, { once: true });
-        return audio.play().then(() => {
-          clearBrowserMediaSession();
-        }).catch((error) => {
+        return audio.play().catch((error) => {
           cleanup();
           console.warn(errorLabel, error);
         });
@@ -1932,7 +1863,7 @@
           return;
         }
         return audio.play().then(() => {
-          clearBrowserMediaSession();
+          syncBrowserMediaSession();
         }).catch((error) => {
           musicPlaybackActive = false;
           throw error;
@@ -2011,6 +1942,39 @@
         mediaSession.setActionHandler(action, null);
       } catch {}
     });
+  }
+
+  function syncBrowserMediaSession() {
+    const mediaSession = navigator.mediaSession;
+    if (!mediaSession || typeof MediaMetadata === 'undefined') return;
+
+    try {
+      mediaSession.metadata = new MediaMetadata({
+        title: t('app_name'),
+        artist: getThemeLabel(currentThemeKey),
+        album: boardLabel(),
+      });
+    } catch {}
+
+    try {
+      mediaSession.playbackState = isMusicActuallyPlaying() ? 'playing' : 'paused';
+    } catch {}
+
+    try {
+      mediaSession.setActionHandler('play', () => {
+        void backgroundMusic.play();
+      });
+    } catch {}
+    try {
+      mediaSession.setActionHandler('pause', () => {
+        backgroundMusic.pause();
+      });
+    } catch {}
+    try {
+      mediaSession.setActionHandler('stop', () => {
+        stopMusic();
+      });
+    } catch {}
   }
 
   function primeMusicAudioContext(audioContext) {
@@ -2809,8 +2773,6 @@
         showLossModal();
       }, 520);
     }
-    state.audioEnablePending = false;
-    syncAudioEnableOverlay();
     updateCounters();
   }
 
@@ -2861,7 +2823,6 @@
 
   function startSelectedGame() {
     const selection = getSelection();
-    state.audioEnablePending = false;
     showGame();
     newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset);
   }
@@ -2871,8 +2832,9 @@
   function handlePlayButtonPress() {
     if (playButtonStartLocked) return;
     playButtonStartLocked = true;
-    if (isIosSafari() && !isMusicMuted) {
-      void warmupIosPlayAudio();
+    if (!isMusicMuted) {
+      void unlockIosAudio();
+      void preloadCurrentThemeMusic();
     }
     startSelectedGame();
     window.setTimeout(() => {
@@ -3340,8 +3302,11 @@
     if (state.screen !== 'game') return;
     if (!(e.pointerType === 'mouse' || e.pointerType === 'touch' || e.pointerType === 'pen')) return;
     const c = toCell(e.clientX, e.clientY);
+    if (!state.started && !state.over) {
+      void unlockIosAudio();
+      void preloadCurrentThemeMusic();
+    }
     if (isIosSafari() && !state.started && !state.over) {
-      void warmupIosPlayAudio();
       if (c && !state.hintMode && !isMusicMuted && !isMusicActuallyPlaying()) {
         tryStartGameMusicFromGesture(true);
       }
@@ -3672,13 +3637,6 @@
   if (menuBtn) menuBtn.addEventListener('click', showMenu);
   if (languageToggleBtn) languageToggleBtn.addEventListener('click', toggleLanguage);
   if (musicToggleBtn) musicToggleBtn.addEventListener('click', toggleMusic);
-  if (audioEnableYesBtn) {
-    audioEnableYesBtn.addEventListener('pointerup', handleAudioEnableYesGesture);
-    audioEnableYesBtn.addEventListener('click', handleAudioEnableYesGesture);
-  }
-  if (audioEnableNoBtn) {
-    audioEnableNoBtn.addEventListener('click', declineAudioEnableOverlay);
-  }
   if (soundToggleBtn) soundToggleBtn.addEventListener('click', toggleSound);
   if (themeCycleBtn) themeCycleBtn.addEventListener('click', cycleTheme);
   if (recordsBtn) recordsBtn.addEventListener('click', showRecordsModal);
