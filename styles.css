@@ -666,32 +666,31 @@ body.needsLandscape .rotateNotice{
 }
 .audioEnableOverlay{
   position:absolute;
-  inset:12px;
+  inset:0;
   z-index:9;
   display:flex;
   align-items:center;
   justify-content:center;
-  padding:18px;
-  border-radius:16px;
-  background:rgba(7,8,12,.76);
-  backdrop-filter:blur(10px);
-  box-shadow:0 18px 36px rgba(0,0,0,.28);
+  padding:20px;
+  background:linear-gradient(180deg, rgba(7,8,12,.32), rgba(7,8,12,.68));
+  backdrop-filter:blur(8px);
 }
 .audioEnableCard{
-  width:min(320px, 100%);
-  padding:18px 16px;
-  border-radius:16px;
-  border:1px solid rgba(255,255,255,.14);
-  background:rgba(12,14,22,.92);
+  width:min(360px, 100%);
+  padding:22px 18px 18px;
+  border-radius:20px;
+  border:1px solid rgba(255,255,255,.16);
+  background:linear-gradient(180deg, rgba(19,24,37,.96), rgba(10,13,22,.96));
   color:var(--text);
   text-align:center;
-  box-shadow:0 18px 36px rgba(0,0,0,.28);
+  box-shadow:0 22px 44px rgba(0,0,0,.34);
 }
 .audioEnableOverlayText{
-  max-width:280px;
+  display:block;
+  max-width:300px;
   margin:0 auto;
-  font-size:16px;
-  line-height:1.35;
+  font-size:17px;
+  line-height:1.4;
   font-weight:800;
   text-shadow:0 1px 10px rgba(0,0,0,.4);
 }
@@ -699,7 +698,10 @@ body.needsLandscape .rotateNotice{
   display:flex;
   justify-content:center;
   gap:10px;
-  margin-top:14px;
+  margin-top:18px;
+}
+.audioEnableActions .btn{
+  min-width:112px;
 }
 
 .hint{

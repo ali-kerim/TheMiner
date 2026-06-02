@@ -111,6 +111,7 @@
   let musicSourceStartedAt = 0;
   let musicPauseOffset = 0;
   let musicLoadToken = 0;
+  let audioEnableYesGestureHandled = false;
   let currentMusicThemeCacheKey = '';
   const sfxBufferCache = new Map();
   let iosAudioUnlocked = false;
@@ -1186,6 +1187,20 @@
       state.audioEnablePending = false;
       syncAudioEnableOverlay();
     }
+  }
+
+  function handleAudioEnableYesGesture(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (audioEnableYesGestureHandled) return;
+    audioEnableYesGestureHandled = true;
+    void handleAudioEnableOverlayClick().catch((error) => {
+      console.warn('Audio enable overlay failed', error);
+    }).finally(() => {
+      audioEnableYesGestureHandled = false;
+    });
   }
 
   function declineAudioEnableOverlay() {
@@ -3658,11 +3673,8 @@
   if (languageToggleBtn) languageToggleBtn.addEventListener('click', toggleLanguage);
   if (musicToggleBtn) musicToggleBtn.addEventListener('click', toggleMusic);
   if (audioEnableYesBtn) {
-    audioEnableYesBtn.addEventListener('click', () => {
-      void handleAudioEnableOverlayClick().catch((error) => {
-        console.warn('Audio enable overlay failed', error);
-      });
-    });
+    audioEnableYesBtn.addEventListener('pointerup', handleAudioEnableYesGesture);
+    audioEnableYesBtn.addEventListener('click', handleAudioEnableYesGesture);
   }
   if (audioEnableNoBtn) {
     audioEnableNoBtn.addEventListener('click', declineAudioEnableOverlay);
