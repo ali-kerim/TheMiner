@@ -66,7 +66,6 @@ body[data-theme="medieval"]{
 html,body{
   width:100%;
   height:100%;
-  min-height:100dvh;
   margin:0;
   padding:0;
   overflow:hidden;
@@ -74,7 +73,7 @@ html,body{
   -webkit-user-select:none;
   -webkit-touch-callout:none;
   -webkit-tap-highlight-color:transparent;
-  touch-action:manipulation;
+  touch-action:none;
   overscroll-behavior:none;
 }
 [hidden]{
@@ -84,7 +83,6 @@ body{
   margin:0;
   width:100%;
   height:100%;
-  min-height:100dvh;
   padding:0;
   font-family:var(--app-font);
   background: radial-gradient(1200px 800px at 20% 0%, #172042 0%, var(--bg0) 45%, #090a0f 100%);
@@ -106,7 +104,7 @@ canvas{
   -webkit-user-select:none;
   -webkit-touch-callout:none;
   -webkit-tap-highlight-color:transparent;
-  touch-action:manipulation;
+  touch-action:none;
 }
 
 button,
@@ -180,8 +178,7 @@ body[data-theme="medieval"]{
 
 .app{
   width:100%;
-  height:100%;
-  min-height:100dvh;
+  height:100dvh;
   min-height:var(--app-height);
   display:flex;
   flex-direction:column;
@@ -622,6 +619,7 @@ body.needsLandscape .rotateNotice{
   border-radius:14px;
   background:rgba(7,8,12,.55);
   overflow:hidden;
+  touch-action:none;
   overscroll-behavior:none;
 }
 
@@ -629,7 +627,9 @@ body.needsLandscape .rotateNotice{
   width:100%;
   height:100%;
   display:block;
-  touch-action:manipulation;
+  transform-origin:0 0;
+  will-change:transform;
+  touch-action:none;
   overscroll-behavior:none;
 }
 
@@ -648,6 +648,7 @@ body.needsLandscape .rotateNotice{
   z-index:4;
   pointer-events:none;
   opacity:0;
+  transform-origin:0 0;
   transition:opacity .48s ease;
 }
 .milestonePopup.isVisible{
@@ -710,8 +711,19 @@ kbd{
   padding:16px;
   background:rgba(0,0,0,.55);
   backdrop-filter:blur(8px);
-  z-index:30;
+  touch-action:manipulation;
+  z-index:9999;
   pointer-events:auto;
+}
+.popup,
+.game-over-modal{
+  touch-action:manipulation;
+  pointer-events:auto;
+  z-index:9999;
+}
+.modal-open .board,
+.modal-open .milestonePopup{
+  pointer-events:none;
 }
 .modalCard{
   width:min(560px, 100%);

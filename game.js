@@ -35,6 +35,7 @@
   const hintInfoPopup = document.getElementById('hintInfoPopup');
   const hintInfoPopupText = document.getElementById('hintInfoPopupText');
   const panelEl = document.querySelector('.panel');
+  const stageEl = gameScreen ? gameScreen.querySelector('.stage') : null;
   const milestonePopup = document.getElementById('milestonePopup');
   const milestonePopupImage = document.getElementById('milestonePopupImage');
 
@@ -787,11 +788,33 @@
     cell: 24,
     ox: 0,
     oy: 0,
+    boardScale: 1,
+    minBoardScale: 1,
+    maxBoardScale: 3,
+    boardPanX: 0,
+    boardPanY: 0,
 
     pointerDown: false,
     downCell: /** @type {{x:number,y:number}|null} */ (null),
     longPressId: /** @type {number | null} */ (null),
-    longPressFired: false,
+    isPinching: false,
+    isPanning: false,
+    didMove: false,
+    longPressTriggered: false,
+    suppressNextClick: false,
+    isModalOpen: false,
+    wasPinching: false,
+    ignorePanUntil: 0,
+    lastTouchCount: 0,
+    activeTouchId: /** @type {number|null} */ (null),
+    pinchStartDistance: 0,
+    pinchStartScale: 1,
+    pinchAnchorX: 0,
+    pinchAnchorY: 0,
+    startX: 0,
+    startY: 0,
+    panOriginX: 0,
+    panOriginY: 0,
 
     boom: /** @type {{x:number,y:number,t0:number}|null} */ (null),
     animRaf: /** @type {number|null} */ (null),
@@ -823,6 +846,122 @@
 
   function clamp(n, a, b) {
     return Math.max(a, Math.min(b, n));
+  }
+
+  const MOVE_THRESHOLD = 9;
+
+  function getBoardViewportRect() {
+    return stageEl ? stageEl.getBoundingClientRect() : canvas.getBoundingClientRect();
+  }
+
+  function clampBoardPan() {
+    const viewportRect = getBoardViewportRect();
+    const overflowX = Math.max(0, viewportRect.width * state.boardScale - viewportRect.width);
+    const overflowY = Math.max(0, viewportRect.height * state.boardScale - viewportRect.height);
+    state.boardPanX = clamp(state.boardPanX, -overflowX, 0);
+    state.boardPanY = clamp(state.boardPanY, -overflowY, 0);
+  }
+
+  function applyBoardTransform() {
+    clampBoardPan();
+    const transform = `translate(${state.boardPanX}px, ${state.boardPanY}px) scale(${state.boardScale})`;
+    canvas.style.transform = transform;
+    if (milestonePopup) milestonePopup.style.transform = transform;
+  }
+
+  function resetBoardViewport() {
+    state.boardScale = 1;
+    state.boardPanX = 0;
+    state.boardPanY = 0;
+    resetGestureState(true);
+    applyBoardTransform();
+  }
+
+  function distanceBetweenTouches(touchA, touchB) {
+    return Math.hypot(touchB.clientX - touchA.clientX, touchB.clientY - touchA.clientY);
+  }
+
+  function getTouchCenter(touchA, touchB) {
+    const rect = getBoardViewportRect();
+    return {
+      x: ((touchA.clientX + touchB.clientX) * 0.5) - rect.left,
+      y: ((touchA.clientY + touchB.clientY) * 0.5) - rect.top,
+    };
+  }
+
+  function setBoardScaleAroundPoint(nextScale, anchorX, anchorY) {
+    const clampedScale = clamp(nextScale, state.minBoardScale, state.maxBoardScale);
+    const prevScale = state.boardScale;
+    if (!(clampedScale > 0) || Math.abs(clampedScale - prevScale) < 0.0001) return false;
+
+    const contentX = (anchorX - state.boardPanX) / prevScale;
+    const contentY = (anchorY - state.boardPanY) / prevScale;
+    state.boardScale = clampedScale;
+    state.boardPanX = anchorX - contentX * clampedScale;
+    state.boardPanY = anchorY - contentY * clampedScale;
+    applyBoardTransform();
+    return true;
+  }
+
+  function resetGestureState(resetSuppressNextClick = false) {
+    state.pointerDown = false;
+    state.downCell = null;
+    state.isPinching = false;
+    state.isPanning = false;
+    state.didMove = false;
+    state.longPressTriggered = false;
+    state.activeTouchId = null;
+    state.lastTouchCount = 0;
+    state.wasPinching = false;
+    state.ignorePanUntil = 0;
+    clearLongPress();
+    if (resetSuppressNextClick) state.suppressNextClick = false;
+  }
+
+  function shouldBlockCellOpen() {
+    return state.longPressTriggered || state.didMove || state.isPinching || state.isPanning || state.suppressNextClick;
+  }
+
+  function setModalOpen(open) {
+    state.isModalOpen = open;
+    document.body.classList.toggle('modal-open', open);
+    if (open) {
+      resetGestureState(true);
+    }
+  }
+
+  function recordMove(clientX, clientY) {
+    const moved = Math.hypot(clientX - state.startX, clientY - state.startY) > MOVE_THRESHOLD;
+    if (moved) {
+      state.didMove = true;
+      clearLongPress();
+    }
+    return moved;
+  }
+
+  function armLongPress(cell) {
+    clearLongPress();
+    state.longPressId = setTimeout(() => {
+      if (!state.pointerDown || !state.downCell) return;
+      if (state.isModalOpen) return;
+      if (state.didMove || state.isPinching || state.isPanning) return;
+      state.longPressTriggered = true;
+      state.suppressNextClick = true;
+      toggleFlag(cell.x, cell.y);
+      draw();
+    }, 420);
+  }
+
+  function finishGesture(resetSuppressNextClick = false) {
+    state.pointerDown = false;
+    state.downCell = null;
+    state.isPinching = false;
+    state.isPanning = false;
+    state.didMove = false;
+    state.longPressTriggered = false;
+    state.activeTouchId = null;
+    state.lastTouchCount = 0;
+    if (resetSuppressNextClick) state.suppressNextClick = false;
   }
 
   function readStoredThemeKey() {
@@ -1302,6 +1441,8 @@
   function showMenu() {
     state.screen = 'menu';
     document.body.classList.remove('inGame');
+    setModalOpen(false);
+    resetBoardViewport();
     syncMobileViewportState();
     hideMilestonePopup();
     stopGameplayMarkup();
@@ -1318,6 +1459,8 @@
   function showGame() {
     state.screen = 'game';
     document.body.classList.add('inGame');
+    setModalOpen(false);
+    resetBoardViewport();
     syncMobileViewportState();
     tryLockLandscape();
     initYandexSdk();
@@ -1360,32 +1503,38 @@
     const best = readRecord(selection.recordKey);
     recordsName.textContent = selection.label;
     recordsValue.textContent = best == null ? 'Пока нет рекорда' : `${fmt3(best)} сек`;
+    setModalOpen(true);
     recordsModal.hidden = false;
   }
 
   function hideRecordsModal() {
     recordsModal.hidden = true;
+    if (victoryModal.hidden && lossModal.hidden) setModalOpen(false);
   }
 
   function showVictoryModal() {
     victoryTime.textContent = fmt3(state.timeSec);
     victoryBoard.textContent = boardLabel();
+    setModalOpen(true);
     victoryModal.hidden = false;
   }
 
   function hideVictoryModal() {
     victoryModal.hidden = true;
+    if (recordsModal.hidden && lossModal.hidden) setModalOpen(false);
   }
 
   function showLossModal() {
     lossTime.textContent = fmt3(state.timeSec);
     lossBoard.textContent = boardLabel();
     syncLossContinueButton();
+    setModalOpen(true);
     lossModal.hidden = false;
   }
 
   function hideLossModal() {
     lossModal.hidden = true;
+    if (recordsModal.hidden && victoryModal.hidden) setModalOpen(false);
   }
 
   function setLossContinueLabel(label) {
@@ -2306,8 +2455,10 @@
     if (milestonePopup) milestonePopup.hidden = true;
     state.lossContinueUsed = false;
     state.lossContinuePending = false;
+    setModalOpen(false);
     clearHint();
     resetGrid();
+    resetBoardViewport();
     updateCounters();
     setFace('🙂');
     hideVictoryModal();
@@ -2389,6 +2540,7 @@
       panelEl.style.setProperty('--panel-width', `${gridCssW}px`);
     }
     syncMilestonePopupLayout();
+    applyBoardTransform();
   }
 
   function syncMilestonePopupLayout() {
@@ -2407,16 +2559,16 @@
     milestonePopup.style.height = `${gridCssH}px`;
     milestonePopup.style.width = `${maxWidth}px`;
     milestonePopup.style.maxWidth = `${maxWidth}px`;
-    milestonePopup.style.transform = 'none';
     milestonePopup.style.display = 'flex';
     milestonePopup.style.alignItems = 'center';
     milestonePopup.style.justifyContent = 'center';
+    applyBoardTransform();
   }
 
   function toCell(clientX, clientY) {
     const rect = getCanvasRect();
-    const x = (clientX - rect.left) * state.dpr;
-    const y = (clientY - rect.top) * state.dpr;
+    const x = ((clientX - rect.left) / state.boardScale) * state.dpr;
+    const y = ((clientY - rect.top) / state.boardScale) * state.dpr;
     const cx = Math.floor((x - state.ox) / state.cell);
     const cy = Math.floor((y - state.oy) / state.cell);
     if (!inBounds(cx, cy)) return null;
@@ -2807,27 +2959,35 @@
 
   canvas.addEventListener('pointerdown', (e) => {
     if (state.screen !== 'game') return;
+    if (state.isModalOpen) {
+      resetGestureState();
+      return;
+    }
     if (!(e.pointerType === 'mouse' || e.pointerType === 'touch' || e.pointerType === 'pen')) return;
     canvas.setPointerCapture(e.pointerId);
     state.pointerDown = true;
-    state.longPressFired = false;
+    state.didMove = false;
+    state.longPressTriggered = false;
+    state.isPanning = false;
     setFace('😮');
 
     const c = toCell(e.clientX, e.clientY);
     state.downCell = c;
+    state.startX = e.clientX;
+    state.startY = e.clientY;
 
-    if (e.pointerType !== 'mouse' && c && !state.hintMode) {
-      clearLongPress();
-      state.longPressId = setTimeout(() => {
-        state.longPressFired = true;
-        toggleFlag(c.x, c.y);
-        draw();
-      }, 420);
+    if (e.pointerType !== 'mouse' && c && !state.hintMode && !state.isPinching) {
+      armLongPress(c);
     }
   });
 
   canvas.addEventListener('pointermove', (e) => {
     if (!state.pointerDown) return;
+    if (state.isModalOpen) {
+      resetGestureState();
+      return;
+    }
+    recordMove(e.clientX, e.clientY);
     const c = toCell(e.clientX, e.clientY);
     if (!state.downCell || !c || c.x !== state.downCell.x || c.y !== state.downCell.y) {
       clearLongPress();
@@ -2835,27 +2995,40 @@
   });
 
   canvas.addEventListener('pointerup', (e) => {
+    if (state.isModalOpen) {
+      finishGesture(true);
+      return;
+    }
     state.pointerDown = false;
     clearLongPress();
     if (state.over || state.screen !== 'game') {
+      finishGesture();
       draw();
       return;
     }
 
     const c = toCell(e.clientX, e.clientY);
     if (!c || !state.downCell || c.x !== state.downCell.x || c.y !== state.downCell.y) {
+      finishGesture();
       draw();
       return;
     }
 
-    if (state.longPressFired) {
+    if (shouldBlockCellOpen()) {
+      e.preventDefault();
+      e.stopPropagation();
+      finishGesture(true);
       draw();
       return;
     }
 
     if (state.hintMode) {
-      if (previewHintCell(c.x, c.y)) return;
+      if (previewHintCell(c.x, c.y)) {
+        finishGesture();
+        return;
+      }
       draw();
+      finishGesture();
       return;
     }
 
@@ -2866,26 +3039,186 @@
       if (cell.revealed && cell.n > 0) chord(c.x, c.y);
       else revealCell(c.x, c.y);
     }
+    finishGesture();
     draw();
   });
 
   canvas.addEventListener('pointercancel', () => {
-    state.pointerDown = false;
     clearLongPress();
+    finishGesture();
     draw();
   });
 
-  if (gameScreen) {
-    // CSS overscroll-behavior handles modern browsers, but mobile Safari and
-    // some Android WebViews can still expose page dragging or pull-to-refresh.
-    // Prevent touch scrolling only inside active gameplay so menu scrolling
-    // and form controls remain available.
-    gameScreen.addEventListener('touchmove', (e) => {
+  if (stageEl) {
+    stageEl.addEventListener('touchstart', (e) => {
       if (state.screen !== 'game' || gameScreen.hidden) return;
-      if (!(e.target instanceof Node) || !gameScreen.contains(e.target)) return;
-      if (e.touches.length !== 1) return;
+      if (state.isModalOpen) {
+        resetGestureState();
+        return;
+      }
+      state.lastTouchCount = e.touches.length;
+      if (e.touches.length >= 2) {
+        clearLongPress();
+        state.isPinching = true;
+        state.wasPinching = true;
+        state.isPanning = false;
+        state.didMove = true;
+        state.longPressTriggered = false;
+        state.suppressNextClick = true;
+        state.activeTouchId = null;
+        state.pinchStartDistance = distanceBetweenTouches(e.touches[0], e.touches[1]);
+        state.pinchStartScale = state.boardScale;
+        const center = getTouchCenter(e.touches[0], e.touches[1]);
+        state.pinchAnchorX = center.x;
+        state.pinchAnchorY = center.y;
+        e.preventDefault();
+        return;
+      }
+
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        state.startX = touch.clientX;
+        state.startY = touch.clientY;
+        if (!state.wasPinching && Date.now() >= state.ignorePanUntil) {
+          state.activeTouchId = touch.identifier;
+          state.panOriginX = state.boardPanX;
+          state.panOriginY = state.boardPanY;
+        } else {
+          state.activeTouchId = null;
+          state.suppressNextClick = true;
+        }
+      }
+    }, { passive: false });
+
+    stageEl.addEventListener('touchmove', (e) => {
+      if (state.screen !== 'game' || gameScreen.hidden) return;
+      if (state.isModalOpen) {
+        resetGestureState();
+        return;
+      }
+      state.lastTouchCount = e.touches.length;
+
+      if (e.touches.length >= 2) {
+        clearLongPress();
+        state.didMove = true;
+        state.suppressNextClick = true;
+        if (!state.isPinching) {
+          state.isPinching = true;
+          state.wasPinching = true;
+          state.isPanning = false;
+          state.activeTouchId = null;
+          state.pinchStartDistance = distanceBetweenTouches(e.touches[0], e.touches[1]);
+          state.pinchStartScale = state.boardScale;
+        }
+        const center = getTouchCenter(e.touches[0], e.touches[1]);
+        state.pinchAnchorX = center.x;
+        state.pinchAnchorY = center.y;
+        const distance = distanceBetweenTouches(e.touches[0], e.touches[1]);
+        if (state.pinchStartDistance > 0) {
+          const scaleRatio = distance / state.pinchStartDistance;
+          setBoardScaleAroundPoint(state.pinchStartScale * scaleRatio, center.x, center.y);
+        }
+        e.preventDefault();
+        draw();
+        return;
+      }
+
+      if (e.touches.length === 1) {
+        if (state.wasPinching || Date.now() < state.ignorePanUntil) {
+          state.suppressNextClick = true;
+          e.preventDefault();
+          return;
+        }
+        const touch = state.activeTouchId == null
+          ? e.touches[0]
+          : Array.from(e.touches).find((item) => item.identifier === state.activeTouchId);
+        if (!touch) {
+          state.suppressNextClick = true;
+          e.preventDefault();
+          return;
+        }
+        const dx = touch.clientX - state.startX;
+        const dy = touch.clientY - state.startY;
+        if (Math.hypot(dx, dy) > MOVE_THRESHOLD) {
+          clearLongPress();
+          state.didMove = true;
+          if (state.boardScale > state.minBoardScale) {
+            state.isPanning = true;
+            state.suppressNextClick = true;
+            state.boardPanX = state.panOriginX + dx;
+            state.boardPanY = state.panOriginY + dy;
+            applyBoardTransform();
+            e.preventDefault();
+          }
+        }
+        return;
+      }
+
       e.preventDefault();
     }, { passive: false });
+
+    stageEl.addEventListener('touchend', (e) => {
+      if (state.screen !== 'game') return;
+      if (state.isModalOpen) {
+        resetGestureState();
+        return;
+      }
+      state.lastTouchCount = e.touches.length;
+      if (state.isPinching && e.touches.length >= 2) {
+        state.pinchStartDistance = distanceBetweenTouches(e.touches[0], e.touches[1]);
+        state.pinchStartScale = state.boardScale;
+        const center = getTouchCenter(e.touches[0], e.touches[1]);
+        state.pinchAnchorX = center.x;
+        state.pinchAnchorY = center.y;
+        e.preventDefault();
+        return;
+      }
+
+      if (state.isPinching && e.touches.length === 1) {
+        state.isPinching = false;
+        state.isPanning = false;
+        state.didMove = true;
+        state.wasPinching = true;
+        state.ignorePanUntil = Date.now() + 150;
+        state.activeTouchId = null;
+        state.suppressNextClick = true;
+        e.preventDefault();
+        return;
+      }
+
+      if (e.touches.length === 0) {
+        if (state.wasPinching) {
+          state.ignorePanUntil = Date.now() + 150;
+          state.suppressNextClick = true;
+        }
+        if (state.longPressTriggered || state.didMove || state.isPinching || state.isPanning) {
+          state.suppressNextClick = true;
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        state.isPinching = false;
+        state.isPanning = false;
+        state.wasPinching = false;
+        state.activeTouchId = null;
+      }
+    }, { passive: false });
+
+    stageEl.addEventListener('touchcancel', () => {
+      clearLongPress();
+      state.suppressNextClick = true;
+      resetGestureState();
+      state.ignorePanUntil = Date.now() + 150;
+    }, { passive: false });
+  }
+
+  if (isIosSafari()) {
+    const blockSafariGesture = (e) => {
+      if (state.screen !== 'game') return;
+      e.preventDefault();
+    };
+    document.addEventListener('gesturestart', blockSafariGesture, { passive: false });
+    document.addEventListener('gesturechange', blockSafariGesture, { passive: false });
+    document.addEventListener('gestureend', blockSafariGesture, { passive: false });
   }
 
   function clearLongPress() {
