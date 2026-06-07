@@ -250,7 +250,7 @@
       mines: 'Мины',
       play: 'Играть',
       rotate_title: 'Поверните устройство',
-      rotate_text: 'Для удобной игры на телефоне используется горизонтальный режим.',
+      rotate_text: 'Для удобной игры на телефонах и планшетах используется горизонтальный режим.',
       hint: 'Подсказка',
       hint_button_title: 'Посмотрите рекламу и выберите закрытую клетку для подсказки',
       hint_after_ad: 'Подсказка после рекламы',
@@ -321,7 +321,7 @@
       mines: 'Mines',
       play: 'Play',
       rotate_title: 'Rotate your device',
-      rotate_text: 'Landscape mode is used on phones for more comfortable play.',
+      rotate_text: 'Landscape mode is used on phones and tablets for more comfortable play.',
       hint: 'Hint',
       hint_button_title: 'Watch an ad and choose a closed cell for a hint',
       hint_after_ad: 'Hint after ad',
@@ -434,12 +434,26 @@
     return yandex.initPromise;
   }
 
+  function getTouchDeviceProfile() {
+    const maxTouchPoints = navigator.maxTouchPoints || 0;
+    const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    const noHover = window.matchMedia('(hover: none)').matches;
+    const screenWidth = window.screen?.width || window.innerWidth;
+    const screenHeight = window.screen?.height || window.innerHeight;
+    const shortestScreenSide = Math.min(screenWidth, screenHeight);
+    const longestScreenSide = Math.max(screenWidth, screenHeight);
+    const isSmallOrMediumScreen = shortestScreenSide <= 1100 && longestScreenSide <= 1400;
+    const isTouchDevice = maxTouchPoints > 1 && coarsePointer && noHover;
+
+    return {
+      isTouchDevice,
+      isSmallOrMediumScreen,
+      shouldRequireLandscape: isTouchDevice && isSmallOrMediumScreen
+    };
+  }
+
   function isMobileDevice() {
-    const coarse = window.matchMedia('(pointer: coarse)').matches;
-    const narrowViewport = Math.max(window.innerWidth, window.innerHeight) <= 1000;
-    const shortLandscapeViewport = window.innerWidth <= 950 && window.innerHeight <= 540;
-    const hasTouch = navigator.maxTouchPoints > 0;
-    return (coarse || hasTouch || shortLandscapeViewport) && (narrowViewport || shortLandscapeViewport);
+    return getTouchDeviceProfile().shouldRequireLandscape;
   }
 
   function isIosSafari() {
@@ -453,7 +467,11 @@
   }
 
   function needsLandscapeMode() {
-    return isMobileDevice() && window.innerHeight > window.innerWidth;
+    return getTouchDeviceProfile().shouldRequireLandscape && window.matchMedia('(orientation: portrait)').matches;
+  }
+
+  function isGameplayInteractionLocked() {
+    return state.screen === 'game' && needsLandscapeMode();
   }
 
   function isEmbeddedRuntime() {
@@ -493,7 +511,7 @@
   }
 
   async function tryLockLandscape() {
-    if (!isMobileDevice()) return;
+    if (!getTouchDeviceProfile().shouldRequireLandscape) return;
     try {
       if (screen.orientation && typeof screen.orientation.lock === 'function') {
         await screen.orientation.lock('landscape');
@@ -2959,6 +2977,10 @@
 
   canvas.addEventListener('pointerdown', (e) => {
     if (state.screen !== 'game') return;
+    if (isGameplayInteractionLocked()) {
+      resetGestureState();
+      return;
+    }
     if (state.isModalOpen) {
       resetGestureState();
       return;
@@ -2983,6 +3005,10 @@
 
   canvas.addEventListener('pointermove', (e) => {
     if (!state.pointerDown) return;
+    if (isGameplayInteractionLocked()) {
+      resetGestureState();
+      return;
+    }
     if (state.isModalOpen) {
       resetGestureState();
       return;
@@ -2995,6 +3021,10 @@
   });
 
   canvas.addEventListener('pointerup', (e) => {
+    if (isGameplayInteractionLocked()) {
+      finishGesture(true);
+      return;
+    }
     if (state.isModalOpen) {
       finishGesture(true);
       return;
@@ -3044,6 +3074,10 @@
   });
 
   canvas.addEventListener('pointercancel', () => {
+    if (isGameplayInteractionLocked()) {
+      finishGesture(true);
+      return;
+    }
     clearLongPress();
     finishGesture();
     draw();
@@ -3052,6 +3086,11 @@
   if (stageEl) {
     stageEl.addEventListener('touchstart', (e) => {
       if (state.screen !== 'game' || gameScreen.hidden) return;
+      if (isGameplayInteractionLocked()) {
+        resetGestureState();
+        e.preventDefault();
+        return;
+      }
       if (state.isModalOpen) {
         resetGestureState();
         return;
@@ -3092,6 +3131,11 @@
 
     stageEl.addEventListener('touchmove', (e) => {
       if (state.screen !== 'game' || gameScreen.hidden) return;
+      if (isGameplayInteractionLocked()) {
+        resetGestureState();
+        e.preventDefault();
+        return;
+      }
       if (state.isModalOpen) {
         resetGestureState();
         return;
@@ -3159,6 +3203,13 @@
 
     stageEl.addEventListener('touchend', (e) => {
       if (state.screen !== 'game') return;
+      if (isGameplayInteractionLocked()) {
+        clearLongPress();
+        state.suppressNextClick = true;
+        resetGestureState();
+        e.preventDefault();
+        return;
+      }
       if (state.isModalOpen) {
         resetGestureState();
         return;
@@ -3203,7 +3254,14 @@
       }
     }, { passive: false });
 
-    stageEl.addEventListener('touchcancel', () => {
+    stageEl.addEventListener('touchcancel', (e) => {
+      if (isGameplayInteractionLocked()) {
+        clearLongPress();
+        state.suppressNextClick = true;
+        resetGestureState();
+        e.preventDefault();
+        return;
+      }
       clearLongPress();
       state.suppressNextClick = true;
       resetGestureState();

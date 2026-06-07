@@ -256,6 +256,10 @@ body.needsLandscape .rotateNotice{
   backdrop-filter:blur(10px);
 }
 
+body.needsLandscape .gameScreen > :not(.rotateNotice){
+  pointer-events:none;
+}
+
 .rotateNoticeCard{
   width:min(280px, 100%);
   padding:16px 14px;
