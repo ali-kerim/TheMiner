@@ -110,11 +110,11 @@
   let musicLoadToken = 0;
   let currentMusicThemeCacheKey = '';
   const sfxBufferCache = new Map();
-  // Remembers whether the current background track was actually playing
-  // before the tab became hidden, so we do not auto-enable music on return.
-  let musicWasPlayingBeforeHide = false;
+  let hasUserStartedGame = false;
+  let isYandexPaused = false;
   let isMusicMuted = !readStoredAudioSetting('music', true);
   let isSoundMuted = !readStoredAudioSetting('sound', true);
+  let musicWasRequested = false;
   const SOUND_VOLUMES = {
     defeat: 0.3,
     victory: 1,
@@ -136,11 +136,14 @@
     scriptPromise: null,
     playerPromise: null,
     loadingReadySent: false,
+    menuReady: false,
     adShowing: false,
     gameplayActive: false,
     audioPausedForAd: false,
     musicWasPlayingBeforeAd: false,
     audioContextSuspendedForAd: false,
+    pauseTimerWasRunning: false,
+    eventsBound: false,
   };
   const LOSS_CONTINUE_LABEL = 'Продолжить за рекламу';
 
@@ -422,6 +425,7 @@
         if (!ysdk) return null;
         yandex.ysdk = ysdk;
         syncLanguageFromYandex(ysdk);
+        bindYandexSdkEvents(ysdk);
         notifyGameReady();
         loadYandexPlayer();
         return ysdk;
@@ -536,13 +540,48 @@
   }
 
   function notifyGameReady() {
-    if (yandex.loadingReadySent || !yandex.ysdk || !isYandexGamesRuntime()) return;
+    if (yandex.loadingReadySent || !yandex.menuReady || !yandex.ysdk || !isYandexGamesRuntime()) return;
     try {
       yandex.ysdk.features?.LoadingAPI?.ready?.();
       yandex.loadingReadySent = true;
     } catch (err) {
       console.warn('Yandex LoadingAPI.ready failed', err);
     }
+  }
+
+  function pauseGameIfNeeded() {
+    if (state.screen !== 'game' || state.over) return;
+    yandex.pauseTimerWasRunning = state.timerId != null;
+    stopTimer();
+    stopGameplayMarkup();
+  }
+
+  function resumeGameIfNeeded() {
+    if (state.screen !== 'game' || state.over) return;
+    if (yandex.pauseTimerWasRunning) {
+      startTimer();
+    }
+    yandex.pauseTimerWasRunning = false;
+    startGameplayMarkup();
+  }
+
+  function bindYandexSdkEvents(ysdk) {
+    if (!ysdk || yandex.eventsBound || typeof ysdk.on !== 'function') return;
+    yandex.eventsBound = true;
+
+    ysdk.on('game_api_pause', () => {
+      isYandexPaused = true;
+      pauseGameIfNeeded();
+      backgroundMusic.pause();
+    });
+
+    ysdk.on('game_api_resume', () => {
+      isYandexPaused = false;
+      resumeGameIfNeeded();
+      if (musicWasRequested && !isMusicMuted) {
+        tryStartBackgroundMusic();
+      }
+    });
   }
 
   function loadYandexPlayer() {
@@ -561,7 +600,17 @@
   }
 
   function startGameplayMarkup() {
-    if (!isYandexGamesRuntime() || !yandex.ysdk || yandex.gameplayActive || yandex.adShowing || state.screen !== 'game' || state.over) return;
+    if (
+      !isYandexGamesRuntime() ||
+      !yandex.ysdk ||
+      yandex.gameplayActive ||
+      yandex.adShowing ||
+      isYandexPaused ||
+      document.hidden ||
+      state.screen !== 'game' ||
+      state.over ||
+      state.isModalOpen
+    ) return;
     try {
       yandex.ysdk.features?.GameplayAPI?.start?.();
       yandex.gameplayActive = true;
@@ -945,6 +994,9 @@
     document.body.classList.toggle('modal-open', open);
     if (open) {
       resetGestureState(true);
+      stopGameplayMarkup();
+    } else if (!isYandexPaused && !document.hidden) {
+      startGameplayMarkup();
     }
   }
 
@@ -1214,14 +1266,17 @@
     applyLanguage(currentLanguage === 'ru' ? 'en' : 'ru');
   }
 
-  function safePlayBackgroundMusic(contextLabel = 'Background music playback failed') {
-    return backgroundMusic.play().catch((error) => {
-      console.warn(contextLabel, error);
-    });
-  }
-
   function shouldMusicBeActive() {
     return state.screen === 'game' && !state.over;
+  }
+
+  function tryStartBackgroundMusic() {
+    if (isMusicMuted) return;
+    if (!hasUserStartedGame) return;
+    if (isYandexPaused) return;
+    if (!shouldMusicBeActive()) return;
+    if (isAdAudioBlocked()) return;
+    backgroundMusic.play().catch(console.warn);
   }
 
   function syncAudioButtons() {
@@ -1249,7 +1304,7 @@
     void preloadCurrentThemeMusic();
 
     if (restartMusic && changed && !musicPlaybackActive && !isMusicMuted && shouldMusicBeActive()) {
-      void safePlayBackgroundMusic('Background music restart failed after theme change');
+      tryStartBackgroundMusic();
     }
     if (state.screen === 'game') draw();
   }
@@ -1268,9 +1323,8 @@
       backgroundMusic.pause();
       return;
     }
-    if (shouldMusicBeActive()) {
-      void safePlayBackgroundMusic('Background music playback failed after unmuting');
-    }
+    musicWasRequested = true;
+    tryStartBackgroundMusic();
   }
 
   function toggleSound() {
@@ -1458,6 +1512,7 @@
 
   function showMenu() {
     state.screen = 'menu';
+    yandex.menuReady = true;
     document.body.classList.remove('inGame');
     setModalOpen(false);
     resetBoardViewport();
@@ -1472,6 +1527,7 @@
     hideRecordsModal();
     menuScreen.hidden = false;
     gameScreen.hidden = true;
+    notifyGameReady();
   }
 
   function showGame() {
@@ -2114,7 +2170,6 @@
   function stopMusic() {
     musicLoadToken++;
     musicPlaybackActive = false;
-    musicWasPlayingBeforeHide = false;
     teardownMusicSource(false);
     currentMusicIndex = -1;
   }
@@ -2160,13 +2215,13 @@
   function resumeAudioAfterAd() {
     if (!yandex.audioPausedForAd) return;
 
-    const shouldResumeMusic = yandex.musicWasPlayingBeforeAd && !isMusicMuted && shouldMusicBeActive();
+    const shouldResumeMusic = (yandex.musicWasPlayingBeforeAd || musicWasRequested) && !isMusicMuted && !isYandexPaused && shouldMusicBeActive();
     yandex.audioPausedForAd = false;
     yandex.musicWasPlayingBeforeAd = false;
     yandex.audioContextSuspendedForAd = false;
 
     if (shouldResumeMusic) {
-      void safePlayBackgroundMusic('Background music resume failed after ad');
+      tryStartBackgroundMusic();
       return;
     }
 
@@ -2176,7 +2231,7 @@
   }
 
   async function playMusic() {
-    if (isMusicMuted || !shouldMusicBeActive() || isAdAudioBlocked()) return;
+    if (isMusicMuted || !hasUserStartedGame || isYandexPaused || !shouldMusicBeActive() || isAdAudioBlocked()) return;
 
     musicPlaybackActive = true;
     const playbackToken = ++musicLoadToken;
@@ -2188,6 +2243,8 @@
       playbackToken !== musicLoadToken ||
       !musicPlaybackActive ||
       isMusicMuted ||
+      !hasUserStartedGame ||
+      isYandexPaused ||
       !shouldMusicBeActive() ||
       !buffers.length
     ) {
@@ -2231,34 +2288,20 @@
 
   function handleDocumentVisibilityChange() {
     if (document.hidden) {
-      // Pause only if music was really playing before hiding the tab.
-      musicWasPlayingBeforeHide = Boolean(isMusicActuallyPlaying() && !isMusicMuted && musicPlaybackActive);
-      if (musicWasPlayingBeforeHide) {
-        pauseMusic();
-      }
+      stopGameplayMarkup();
+      backgroundMusic.pause();
       return;
     }
 
-    if (isAdAudioBlocked()) {
-      musicWasPlayingBeforeHide = false;
-      return;
+    startGameplayMarkup();
+    if (musicWasRequested && !isMusicMuted && !isYandexPaused) {
+      tryStartBackgroundMusic();
     }
-
-    // Resume only when the player did not mute music manually and the game
-    // is still in a state where music is supposed to be active.
-    if (!musicWasPlayingBeforeHide || isMusicMuted || !shouldMusicBeActive()) {
-      musicWasPlayingBeforeHide = false;
-      return;
-    }
-
-    musicWasPlayingBeforeHide = false;
-    void safePlayBackgroundMusic('Background music resume failed after tab became visible');
   }
 
   function startGameMusic() {
     stopMusic();
-    if (isMusicMuted || !shouldMusicBeActive()) return;
-    void safePlayBackgroundMusic();
+    tryStartBackgroundMusic();
   }
 
   function startTimer() {
@@ -2492,13 +2535,17 @@
     newGame(selection.w, selection.h, selection.m, selection.recordKey, selection.preset);
   }
 
+  function startGame() {
+    startSelectedGame();
+  }
+
   let playButtonStartLocked = false;
 
   function startGameMusicFromGesture() {
     return warmupAudioPlayback().then((ready) => {
-      if (!ready || isMusicMuted || state.screen !== 'game' || state.over) return false;
+      if (!ready || state.screen !== 'game' || state.over) return false;
       if (isMusicActuallyPlaying() && musicPlaybackActive) return true;
-      startGameMusic();
+      tryStartBackgroundMusic();
       return true;
     });
   }
@@ -2506,7 +2553,10 @@
   function handlePlayButtonPress() {
     if (playButtonStartLocked) return;
     playButtonStartLocked = true;
-    startSelectedGame();
+    hasUserStartedGame = true;
+    musicWasRequested = true;
+    startGame();
+    tryStartBackgroundMusic();
     void startGameMusicFromGesture();
     window.setTimeout(() => {
       playButtonStartLocked = false;
