@@ -111,6 +111,7 @@
   let currentMusicThemeCacheKey = '';
   const sfxBufferCache = new Map();
   let hasUserStartedGame = false;
+  let isGameOver = false;
   let isYandexPaused = false;
   let isMusicMuted = !readStoredAudioSetting('music', true);
   let isSoundMuted = !readStoredAudioSetting('sound', true);
@@ -424,6 +425,7 @@
       .then((ysdk) => {
         if (!ysdk) return null;
         yandex.ysdk = ysdk;
+        window.ysdk = ysdk;
         syncLanguageFromYandex(ysdk);
         bindYandexSdkEvents(ysdk);
         notifyGameReady();
@@ -578,8 +580,8 @@
     ysdk.on('game_api_resume', () => {
       isYandexPaused = false;
       resumeGameIfNeeded();
-      if (musicWasRequested && !isMusicMuted) {
-        tryStartBackgroundMusic();
+      if (hasUserStartedGame && musicWasRequested && !isGameOver) {
+        onGameplayStarted();
       }
     });
   }
@@ -646,6 +648,7 @@
 
       const finishAd = () => {
         yandex.adShowing = false;
+        isYandexPaused = false;
         resumeAudioAfterAd();
         startGameplayMarkup();
       };
@@ -654,6 +657,7 @@
         ysdk.adv.showFullscreenAdv({
           callbacks: {
             onOpen: () => {
+              isYandexPaused = true;
               stopGameplayMarkup();
               void pauseAudioForAd();
             },
@@ -687,6 +691,7 @@
         if (settled) return;
         settled = true;
         yandex.adShowing = false;
+        isYandexPaused = false;
         resumeAudioAfterAd();
         startGameplayMarkup();
         resolve(result);
@@ -694,6 +699,7 @@
 
       stopGameplayMarkup();
       yandex.adShowing = true;
+      isYandexPaused = true;
       void pauseAudioForAd();
 
       try {
@@ -738,6 +744,7 @@
         if (settled) return;
         settled = true;
         yandex.adShowing = false;
+        isYandexPaused = false;
         resumeAudioAfterAd();
         startGameplayMarkup();
         resolve(result);
@@ -745,6 +752,7 @@
 
       stopGameplayMarkup();
       yandex.adShowing = true;
+      isYandexPaused = true;
       void pauseAudioForAd();
 
       try {
@@ -1270,6 +1278,22 @@
     return state.screen === 'game' && !state.over;
   }
 
+  function onGameplayStarted() {
+    isGameOver = false;
+    hasUserStartedGame = true;
+    musicWasRequested = true;
+
+    if (!yandex.adShowing) {
+      isYandexPaused = false;
+    }
+
+    if (!isYandexPaused && !document.hidden) {
+      tryStartBackgroundMusic();
+    }
+
+    startGameplayMarkup();
+  }
+
   function tryStartBackgroundMusic() {
     if (isMusicMuted) return;
     if (!hasUserStartedGame) return;
@@ -1277,6 +1301,13 @@
     if (!shouldMusicBeActive()) return;
     if (isAdAudioBlocked()) return;
     backgroundMusic.play().catch(console.warn);
+  }
+
+  function unlockAudioIfNeeded() {
+    return warmupAudioPlayback().then((ready) => ready).catch((error) => {
+      console.warn('Audio unlock failed', error);
+      return false;
+    });
   }
 
   function syncAudioButtons() {
@@ -1672,8 +1703,9 @@
     updateCounters();
     draw();
     startTimer();
-    startGameMusic();
-    startGameplayMarkup();
+    isGameOver = false;
+    void unlockAudioIfNeeded();
+    onGameplayStarted();
     checkWin();
     return true;
   }
@@ -2446,6 +2478,7 @@
   function gameOver(won, opts) {
     state.over = true;
     state.won = won;
+    isGameOver = true;
     hideMilestonePopup();
     clearHint();
     stopGameplayMarkup();
@@ -2499,6 +2532,7 @@
     state.started = false;
     state.over = false;
     state.won = false;
+    isGameOver = false;
     state.timeSec = 0;
     stopTimer();
     stopOutcomeSounds();
@@ -2537,27 +2571,16 @@
 
   function startGame() {
     startSelectedGame();
+    void unlockAudioIfNeeded();
+    onGameplayStarted();
   }
 
   let playButtonStartLocked = false;
 
-  function startGameMusicFromGesture() {
-    return warmupAudioPlayback().then((ready) => {
-      if (!ready || state.screen !== 'game' || state.over) return false;
-      if (isMusicActuallyPlaying() && musicPlaybackActive) return true;
-      tryStartBackgroundMusic();
-      return true;
-    });
-  }
-
   function handlePlayButtonPress() {
     if (playButtonStartLocked) return;
     playButtonStartLocked = true;
-    hasUserStartedGame = true;
-    musicWasRequested = true;
     startGame();
-    tryStartBackgroundMusic();
-    void startGameMusicFromGesture();
     window.setTimeout(() => {
       playButtonStartLocked = false;
     }, 700);
@@ -2565,11 +2588,12 @@
 
   function restartSameSettings() {
     newGame(state.w, state.h, state.mines, state.currentRecordKey, state.currentPreset);
+    void unlockAudioIfNeeded();
+    onGameplayStarted();
   }
 
   function handleReplayButtonPress() {
     restartSameSettings();
-    void startGameMusicFromGesture();
   }
 
   function getCanvasRect() {
