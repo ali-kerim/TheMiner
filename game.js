@@ -395,7 +395,7 @@
     }
 
     yandex.scriptPromise = new Promise((resolve) => {
-      const existingScript = document.querySelector('script[data-yandex-games-sdk="true"]');
+      const existingScript = document.querySelector('script[data-yandex-games-sdk="true"], script[src="/sdk.js"]');
       if (existingScript) {
         existingScript.addEventListener('load', () => resolve(window.YaGames || null), { once: true });
         existingScript.addEventListener('error', () => resolve(null), { once: true });
@@ -403,7 +403,7 @@
       }
 
       const script = document.createElement('script');
-      script.src = 'https://yandex.ru/games/sdk/v2';
+      script.src = '/sdk.js';
       script.async = true;
       script.dataset.yandexGamesSdk = 'true';
       script.addEventListener('load', () => resolve(window.YaGames || null), { once: true });
