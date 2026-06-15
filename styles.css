@@ -667,20 +667,52 @@ body.needsLandscape .gameScreen > :not(.rotateNotice){
 }
 
 .hint{
-  position:absolute;
-  inset:auto 12px 12px 12px;
-  display:flex;
-  justify-content:flex-end;
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:none;
   pointer-events:none;
 }
+.hintOverlay,
+.controls-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.55);
+  z-index:9998;
+  display:none;
+  pointer-events:auto;
+}
 .hintBox{
-  pointer-events:none;
   padding:10px 12px;
   border-radius:12px;
   border:1px solid rgba(255,255,255,.10);
   background:rgba(10,12,18,.55);
   backdrop-filter:blur(10px);
   max-width:380px;
+  position:relative;
+  z-index:9999;
+}
+.controls-popup{
+  position:fixed;
+  left:50%;
+  top:50%;
+  transform:translate(-50%, -50%);
+  z-index:9999;
+  display:none;
+  max-width:min(520px, calc(100vw - 24px));
+  max-height:calc(100dvh - 24px);
+  overflow-y:auto;
+  pointer-events:auto;
+  touch-action:manipulation;
+}
+.hintBox > .hintTitle{
+  display:none;
+}
+.hintHeader{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
 }
 .hintTitle{
   font-weight:700;
@@ -692,6 +724,24 @@ body.needsLandscape .gameScreen > :not(.rotateNotice){
   line-height:1.4;
   display:grid;
   gap:4px;
+}
+.hintActions{
+  display:none;
+  margin-top:12px;
+}
+.hintCloseBtn{
+  display:none;
+  width:36px;
+  min-width:36px;
+  height:36px;
+  border-radius:10px;
+  font-size:20px;
+  line-height:1;
+  flex:0 0 auto;
+}
+.hintDismissBtn{
+  width:100%;
+  min-height:42px;
 }
 kbd{
   font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
@@ -728,6 +778,22 @@ kbd{
 .modal-open .board,
 .modal-open .milestonePopup{
   pointer-events:none;
+}
+body.controls-open .board,
+body.controls-open .milestonePopup{
+  pointer-events:none;
+  touch-action:none;
+}
+body.controls-open .hint,
+body.controls-open .controls-overlay,
+body.controls-open .controls-popup{
+  display:block;
+}
+body.controls-open .controls-overlay,
+body.controls-open .controls-popup,
+body.controls-open .controls-popup button{
+  pointer-events:auto;
+  touch-action:manipulation;
 }
 .modalCard{
   width:min(560px, 100%);
@@ -890,7 +956,100 @@ kbd{
     margin-right:0;
   }
   .counter{width:84px}
-  .hint{display:none}
+}
+
+@media (max-width: 768px), (max-height: 500px){
+  body.controls-open .hint{
+    display:block;
+  }
+
+  body.controls-open .hintBox,
+  body.controls-open .controls-popup{
+    width:min(520px, calc(100vw - 24px));
+    max-width:min(520px, calc(100vw - 24px));
+    max-height:calc(100dvh - 24px);
+    overflow-y:auto;
+    padding:clamp(12px, 3vw, 20px);
+    border-radius:16px;
+    background:rgba(10,12,18,.94);
+    box-shadow:0 20px 60px rgba(0,0,0,.48);
+    pointer-events:auto;
+  }
+
+  body.controls-open .hintHeader{
+    margin-bottom:clamp(8px, 2.6vw, 12px);
+  }
+
+  body.controls-open .hintTitle{
+    margin:0;
+    font-size:clamp(18px, 4vw, 24px);
+  }
+
+  body.controls-open .hintBody{
+    gap:clamp(6px, 2vw, 10px);
+    font-size:clamp(13px, 2.8vw, 16px);
+    line-height:1.35;
+  }
+
+  body.controls-open .hintBody div,
+  body.controls-open .hintBody p{
+    font-size:clamp(13px, 2.8vw, 16px);
+  }
+
+  body.controls-open .hintActions{
+    display:block;
+  }
+
+  body.controls-open .hintCloseBtn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    pointer-events:auto;
+  }
+
+  body.controls-open .hintDismissBtn{
+    font-size:clamp(14px, 3vw, 17px);
+    pointer-events:auto;
+  }
+
+  body.controls-open kbd{
+    font-size:clamp(11px, 2.5vw, 13px);
+    padding:2px 5px;
+  }
+}
+
+@media (max-height: 500px){
+  body.controls-open .hint{
+    padding:10px;
+  }
+
+  body.controls-open .hintBox{
+    width:min(520px, calc(100vw - 20px));
+    max-height:calc(100dvh - 20px);
+    padding:clamp(10px, 2.4vw, 14px);
+    border-radius:14px;
+  }
+
+  body.controls-open .hintHeader{
+    gap:8px;
+    margin-bottom:8px;
+  }
+
+  body.controls-open .hintTitle{
+    font-size:clamp(16px, 3.4vw, 20px);
+  }
+
+  body.controls-open .hintBody{
+    gap:5px;
+    font-size:clamp(12px, 2.5vw, 14px);
+    line-height:1.25;
+  }
+
+  body.controls-open .hintDismissBtn,
+  body.controls-open .hintCloseBtn{
+    min-height:36px;
+    height:36px;
+  }
 }
 
 @media (pointer: coarse) and (max-width: 900px){
@@ -1235,8 +1394,7 @@ body.isMobileLandscape .hintControl .themeBtn{
   order:2;
 }
 
-body.isMobileLandscape .hintText,
-body.isMobileLandscape .hint{
+body.isMobileLandscape .hintText{
   display:none;
 }
 

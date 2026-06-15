@@ -32,8 +32,13 @@
   const hintBtn = document.getElementById('hintBtn');
   const hintText = document.getElementById('hintText');
   const hintControl = document.querySelector('.hintControl');
+  const hintEl = document.getElementById('hint');
+  const hintOverlay = document.getElementById('hintOverlay');
+  let controlsPopup = hintEl?.querySelector('.controls-popup') || null;
   const hintInfoPopup = document.getElementById('hintInfoPopup');
   const hintInfoPopupText = document.getElementById('hintInfoPopupText');
+  const hintCloseBtn = document.getElementById('hintCloseBtn');
+  const hintDismissBtn = document.getElementById('hintDismissBtn');
   const panelEl = document.querySelector('.panel');
   const stageEl = gameScreen ? gameScreen.querySelector('.stage') : null;
   const milestonePopup = document.getElementById('milestonePopup');
@@ -477,7 +482,29 @@
   }
 
   function isGameplayInteractionLocked() {
-    return state.screen === 'game' && needsLandscapeMode();
+    return state.screen === 'game' && (needsLandscapeMode() || isControlsHintBlocking());
+  }
+
+  function shouldUseControlsModal() {
+    return window.matchMedia('(max-width: 768px), (max-height: 500px)').matches;
+  }
+
+  function isControlsHintBlocking() {
+    return state.controlsHintOpen && shouldUseControlsModal();
+  }
+
+  function hasSeenControlsHelp() {
+    try {
+      return localStorage.getItem('controlsHelpSeen') === 'true';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markControlsHelpSeen() {
+    try {
+      localStorage.setItem('controlsHelpSeen', 'true');
+    } catch (e) {}
   }
 
   function isEmbeddedRuntime() {
@@ -898,6 +925,7 @@
     hintAdPending: false,
     hintPreview: /** @type {{x:number,y:number}|null} */ (null),
     hintPreviewId: /** @type {number | null} */ (null),
+    controlsHintOpen: false,
     minesPlaced: false,
     milestoneSeen: /** @type {number[]} */ ([]),
     milestoneQueue: /** @type {number[]} */ ([]),
@@ -1214,8 +1242,10 @@
     if (rotateTitle) rotateTitle.textContent = t('rotate_title');
     if (rotateText) rotateText.textContent = t('rotate_text');
 
-    const hintTitle = document.querySelector('.hintTitle');
+    const hintTitle = document.getElementById('hintTitle') || document.querySelector('.hintHeader .hintTitle') || document.querySelector('.hintTitle');
     if (hintTitle) hintTitle.textContent = t('controls');
+    if (hintCloseBtn) hintCloseBtn.setAttribute('aria-label', t('close'));
+    if (hintDismissBtn) hintDismissBtn.textContent = currentLanguage === 'ru' ? 'Понятно' : 'Got it';
     const hintRows = document.querySelectorAll('.hintBody div');
     if (hintRows[0]) hintRows[0].innerHTML = currentLanguage === 'ru' ? '<kbd>ЛКМ</kbd> открыть' : '<kbd>LMB</kbd> open';
     if (hintRows[1]) hintRows[1].innerHTML = currentLanguage === 'ru' ? '<kbd>ПКМ</kbd> флажок' : '<kbd>RMB</kbd> flag';
@@ -1440,6 +1470,114 @@
     syncHintButton();
   }
 
+  function ensureControlsPopupElements() {
+    if (!hintEl || !hintOverlay) return false;
+    if (!controlsPopup || !hintEl.contains(controlsPopup)) {
+      controlsPopup = hintEl.querySelector('.controls-popup');
+    }
+    if (!controlsPopup) return false;
+    if (hintEl.parentElement !== document.body) document.body.appendChild(hintEl);
+    if (hintOverlay.parentElement !== document.body) document.body.appendChild(hintOverlay);
+    return true;
+  }
+
+  function initControlsHelp() {
+    const ready = ensureControlsPopupElements();
+    if (!ready) {
+      state.controlsHintOpen = false;
+      document.body.classList.remove('controls-open');
+      return false;
+    }
+    hintOverlay.hidden = !state.controlsHintOpen;
+    hintOverlay.setAttribute('aria-hidden', state.controlsHintOpen ? 'false' : 'true');
+    hintEl.hidden = !state.controlsHintOpen;
+    hintEl.setAttribute('aria-hidden', state.controlsHintOpen ? 'false' : 'true');
+    controlsPopup.hidden = !state.controlsHintOpen;
+    controlsPopup.setAttribute('aria-modal', state.controlsHintOpen ? 'true' : 'false');
+    document.body.classList.toggle('controls-open', state.controlsHintOpen);
+    return true;
+  }
+
+  function syncControlsHintUi() {
+    const shouldUseModal = shouldUseControlsModal();
+    const controlsOpen = state.screen === 'game' && shouldUseModal && state.controlsHintOpen;
+    document.body.classList.toggle('controls-modal-layout', shouldUseModal);
+    if (!initControlsHelp()) return;
+    hintOverlay.hidden = !controlsOpen;
+    hintOverlay.setAttribute('aria-hidden', controlsOpen ? 'false' : 'true');
+    hintEl.hidden = !controlsOpen;
+    hintEl.setAttribute('aria-hidden', controlsOpen ? 'false' : 'true');
+    controlsPopup.hidden = !controlsOpen;
+    controlsPopup.setAttribute('aria-modal', controlsOpen ? 'true' : 'false');
+    document.body.classList.toggle('controls-open', controlsOpen);
+  }
+
+  function isInsidePopup(event) {
+    const target = event?.target;
+    return !!(target instanceof Element && target.closest('.controls-popup, .controls-overlay'));
+  }
+
+  function showControlsPopup(options = {}) {
+    const { auto = false } = options;
+    if (state.screen !== 'game' || !shouldUseControlsModal()) {
+      syncControlsHintUi();
+      return;
+    }
+    if (auto && hasSeenControlsHelp()) {
+      state.controlsHintOpen = false;
+      syncControlsHintUi();
+      return;
+    }
+    if (!initControlsHelp()) {
+      state.controlsHintOpen = false;
+      return;
+    }
+    state.controlsHintOpen = true;
+    resetGestureState();
+    syncControlsHintUi();
+  }
+
+  function closeControlsPopup(markDismissed = true) {
+    state.controlsHintOpen = false;
+    if (controlsPopup) controlsPopup.hidden = true;
+    if (hintOverlay) hintOverlay.hidden = true;
+    if (hintEl) hintEl.hidden = true;
+    document.body.classList.remove('controls-open');
+    if (markDismissed) markControlsHelpSeen();
+    resetGestureState();
+    syncControlsHintUi();
+  }
+
+  function hideControlsPopup() {
+    closeControlsPopup(false);
+  }
+
+  function closeControlsHint(markDismissed = true) {
+    closeControlsPopup(markDismissed);
+  }
+
+  function maybeShowControlsHint() {
+    if (state.screen !== 'game') {
+      state.controlsHintOpen = false;
+      syncControlsHintUi();
+      return;
+    }
+
+    if (!shouldUseControlsModal()) {
+      state.controlsHintOpen = false;
+      syncControlsHintUi();
+      return;
+    }
+
+    if (!hasSeenControlsHelp()) {
+      showControlsPopup({ auto: true });
+      return;
+    }
+
+    state.controlsHintOpen = false;
+    syncControlsHintUi();
+  }
+
   function clearHint() {
     stopHintMode();
     hideHintInfoPopup();
@@ -1552,6 +1690,7 @@
     stopGameplayMarkup();
     stopTimer();
     stopGameMusic();
+    closeControlsHint(false);
     clearHint();
     hideVictoryModal();
     hideLossModal();
@@ -1572,6 +1711,8 @@
     menuScreen.hidden = true;
     gameScreen.hidden = false;
     requestAnimationFrame(() => {
+      initControlsHelp();
+      maybeShowControlsHint();
       resize();
       draw();
     });
@@ -2633,6 +2774,7 @@
     }
     syncMilestonePopupLayout();
     applyBoardTransform();
+    syncControlsHintUi();
   }
 
   function syncMilestonePopupLayout() {
@@ -3042,14 +3184,21 @@
 
   // Disable the browser context menu globally so right click and long press
   // stay inside the game's own input model on desktop and mobile.
-  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.addEventListener('contextmenu', (e) => {
+    if (isInsidePopup(e)) return;
+    e.preventDefault();
+  });
 
   // Prevent accidental text selection during rapid taps, drags, and long press.
-  document.addEventListener('selectstart', (e) => e.preventDefault());
+  document.addEventListener('selectstart', (e) => {
+    if (isInsidePopup(e)) return;
+    e.preventDefault();
+  });
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   canvas.addEventListener('pointerdown', (e) => {
+    if (isInsidePopup(e)) return;
     if (state.screen !== 'game') return;
     if (isGameplayInteractionLocked()) {
       resetGestureState();
@@ -3078,6 +3227,7 @@
   });
 
   canvas.addEventListener('pointermove', (e) => {
+    if (isInsidePopup(e)) return;
     if (!state.pointerDown) return;
     if (isGameplayInteractionLocked()) {
       resetGestureState();
@@ -3095,6 +3245,7 @@
   });
 
   canvas.addEventListener('pointerup', (e) => {
+    if (isInsidePopup(e)) return;
     if (isGameplayInteractionLocked()) {
       finishGesture(true);
       return;
@@ -3159,6 +3310,7 @@
 
   if (stageEl) {
     stageEl.addEventListener('touchstart', (e) => {
+      if (isInsidePopup(e)) return;
       if (state.screen !== 'game' || gameScreen.hidden) return;
       if (isGameplayInteractionLocked()) {
         resetGestureState();
@@ -3204,6 +3356,7 @@
     }, { passive: false });
 
     stageEl.addEventListener('touchmove', (e) => {
+      if (isInsidePopup(e)) return;
       if (state.screen !== 'game' || gameScreen.hidden) return;
       if (isGameplayInteractionLocked()) {
         resetGestureState();
@@ -3276,6 +3429,7 @@
     }, { passive: false });
 
     stageEl.addEventListener('touchend', (e) => {
+      if (isInsidePopup(e)) return;
       if (state.screen !== 'game') return;
       if (isGameplayInteractionLocked()) {
         clearLongPress();
@@ -3329,6 +3483,7 @@
     }, { passive: false });
 
     stageEl.addEventListener('touchcancel', (e) => {
+      if (isInsidePopup(e)) return;
       if (isGameplayInteractionLocked()) {
         clearLongPress();
         state.suppressNextClick = true;
@@ -3594,6 +3749,23 @@
 
   faceBtn.addEventListener('click', restartSameSettings);
   if (hintBtn) hintBtn.addEventListener('click', startHintMode);
+  if (hintCloseBtn) {
+    hintCloseBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    hintCloseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeControlsPopup();
+    });
+  }
+  if (hintDismissBtn) {
+    hintDismissBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    hintDismissBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeControlsPopup();
+    });
+  }
+  if (hintOverlay) {
+    hintOverlay.addEventListener('pointerdown', (e) => e.stopPropagation());
+  }
   if (playBtn) {
     playBtn.addEventListener('click', handlePlayButtonPress);
   }
@@ -3605,6 +3777,7 @@
   if (recordsBtn) recordsBtn.addEventListener('click', showRecordsModal);
   document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
   document.addEventListener('pointerdown', (e) => {
+    if (isInsidePopup(e)) return;
     if (!hintInfoPopup || hintInfoPopup.hidden || !hintControl) return;
     // Close the local hint popup when the player interacts outside the hint area.
     if (!hintControl.contains(e.target)) hideHintInfoPopup();
@@ -3677,6 +3850,7 @@
 
   window.addEventListener('resize', () => {
     syncMobileViewportState();
+    maybeShowControlsHint();
     if (state.screen !== 'game') return;
     resize();
     draw();
@@ -3684,6 +3858,7 @@
 
   window.addEventListener('orientationchange', () => {
     syncMobileViewportState();
+    maybeShowControlsHint();
     if (state.screen !== 'game') return;
     resize();
     draw();
@@ -3692,6 +3867,7 @@
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
       syncMobileViewportState();
+      maybeShowControlsHint();
       if (state.screen !== 'game') return;
       resize();
       draw();
@@ -3703,6 +3879,8 @@
 
   updateCustomVisibility();
   syncMobileViewportState();
+  initControlsHelp();
+  syncControlsHintUi();
   syncSoundVolumes();
   applyTheme(currentThemeKey);
   // Apply a fallback language immediately, then let SDK startup auto-detection
