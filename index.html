@@ -11,7 +11,8 @@
   <body>
     <button id="languageToggleBtn" class="languageToggle" type="button" aria-label="Switch language" title="Switch language">RU</button>
     <div id="app" class="app" role="application" aria-label="Минер">
-      <section id="menuScreen" class="menuScreen">
+      <section id="menuScreen" class="menuScreen menu-screen">
+        <div class="menuContent menu-content">
         <div class="menuCard">
           <h1 class="menuTitle">Минёр</h1>
 
@@ -37,22 +38,25 @@
           <button id="recordsBtn" class="btn menuBtn" type="button">Рекорды</button>
           <button id="toggleCustomBtn" class="btn menuBtn" type="button">Создай свое поле</button>
 
-          <div class="custom menuCustom" id="customControls" hidden>
-            <label class="field menuInputField">
-              <span>Ширина</span>
-              <input id="customW" inputmode="numeric" type="number" min="5" max="60" value="16" />
-            </label>
-            <label class="field menuInputField">
-              <span>Высота</span>
-              <input id="customH" inputmode="numeric" type="number" min="5" max="40" value="16" />
-            </label>
-            <label class="field menuInputField">
-              <span>Мины</span>
-              <input id="customM" inputmode="numeric" type="number" min="1" max="500" value="40" />
-            </label>
+          <div class="customFieldsScroll custom-fields-scroll" id="customFieldsScroll" hidden>
+            <div class="custom menuCustom custom-field-panel" id="customControls">
+              <label class="field menuInputField">
+                <span>Ширина</span>
+                <input id="customW" inputmode="numeric" type="number" min="5" max="60" value="16" />
+              </label>
+              <label class="field menuInputField">
+                <span>Высота</span>
+                <input id="customH" inputmode="numeric" type="number" min="5" max="40" value="16" />
+              </label>
+              <label class="field menuInputField">
+                <span>Мины</span>
+                <input id="customM" inputmode="numeric" type="number" min="1" max="500" value="40" />
+              </label>
+            </div>
           </div>
 
           <button id="playBtn" class="btn primary menuPlayBtn" type="button">Играть</button>
+        </div>
         </div>
       </section>
 

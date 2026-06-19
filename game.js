@@ -1,9 +1,24 @@
 (() => {
   'use strict';
 
+  const appRoot = document.getElementById('app');
+
+  const EARLY_IS_IOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const EARLY_IS_TOUCH_DEVICE =
+    (navigator.maxTouchPoints || 0) > 0 || window.matchMedia('(pointer: coarse)').matches;
+  let scrollTouchStartY = 0;
+
+  if (EARLY_IS_IOS || EARLY_IS_TOUCH_DEVICE) {
+    document.documentElement.classList.add('touch-lock');
+    if (document.body) document.body.classList.add('touch-lock');
+  }
+
   /** @type {HTMLCanvasElement} */
   const canvas = document.getElementById('board');
   const menuScreen = document.getElementById('menuScreen');
+  const customFieldsScroll = document.getElementById('customFieldsScroll');
   const gameScreen = document.getElementById('gameScreen');
   const presetSelect = document.getElementById('presetSelect');
   const toggleCustomBtn = document.getElementById('toggleCustomBtn');
@@ -525,7 +540,88 @@
 
   function syncViewportCssVars() {
     const viewportHeight = window.visualViewport?.height || window.innerHeight;
+    document.documentElement.style.setProperty('--vh', `${viewportHeight * 0.01}px`);
     document.documentElement.style.setProperty('--app-height', `${Math.round(viewportHeight)}px`);
+  }
+
+  function updateViewportHeight() {
+    syncViewportCssVars();
+  }
+
+  function lockWindowScrollPosition() {
+    window.scrollTo(0, 0);
+  }
+
+  function isScrollableElement(element) {
+    return !!(element && element.scrollHeight > element.clientHeight + 1);
+  }
+
+  function isFormControl(target) {
+    return !!(target instanceof Element && target.closest('select, input, textarea'));
+  }
+
+  function getScrollableContainer(target) {
+    if (!(target instanceof Element)) return null;
+    return target.closest('.custom-fields-scroll, .controls-popup, .modalCard, .modal, .popup');
+  }
+
+  function canScrollVertically(element) {
+    return isScrollableElement(element);
+  }
+
+  function handleTouchStartForScrollLock(event) {
+    if (!EARLY_IS_TOUCH_DEVICE) return;
+    if (event.touches.length !== 1) return;
+    scrollTouchStartY = event.touches[0].clientY;
+  }
+
+  function handleTouchMoveForScrollLock(event) {
+    if (!EARLY_IS_TOUCH_DEVICE) return;
+    if (event.touches.length !== 1) {
+      event.preventDefault();
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      event.preventDefault();
+      return;
+    }
+
+    if (appRoot && !appRoot.contains(target)) return;
+    if (isFormControl(target)) return;
+
+    const scrollable = getScrollableContainer(target);
+    if (!scrollable) {
+      event.preventDefault();
+      return;
+    }
+
+    if (!canScrollVertically(scrollable)) {
+      event.preventDefault();
+      return;
+    }
+
+    const currentY = event.touches[0].clientY;
+    const deltaY = currentY - scrollTouchStartY;
+    const isPullingDown = deltaY > 0;
+    const isPullingUp = deltaY < 0;
+    const atTop = scrollable.scrollTop <= 0;
+    const atBottom = scrollable.scrollTop + scrollable.clientHeight >= scrollable.scrollHeight - 1;
+
+    if ((atTop && isPullingDown) || (atBottom && isPullingUp)) {
+      event.preventDefault();
+    }
+  }
+
+  if (EARLY_IS_IOS || EARLY_IS_TOUCH_DEVICE) {
+    document.addEventListener('touchstart', handleTouchStartForScrollLock, { passive: false, capture: true });
+    document.addEventListener('touchmove', handleTouchMoveForScrollLock, { passive: false, capture: true });
+
+    window.addEventListener('scroll', lockWindowScrollPosition, { passive: false });
+    document.addEventListener('scroll', lockWindowScrollPosition, { passive: false, capture: true });
+    lockWindowScrollPosition();
+    updateViewportHeight();
   }
 
   function syncMobileViewportState() {
@@ -534,6 +630,8 @@
     const mobileLandscape = mobile && window.innerWidth > window.innerHeight;
     const shortViewport = mobile && window.innerHeight <= 500;
     const iosSafari = isIosSafari();
+    const touchDevice = (navigator.maxTouchPoints || 0) > 0 || window.matchMedia('(pointer: coarse)').matches;
+    document.body.classList.toggle('touch-device', touchDevice);
     document.body.classList.toggle('isMobileDevice', mobile);
     document.body.classList.toggle('isIosSafari', iosSafari);
     document.body.classList.toggle('needsLandscape', needsLandscape);
@@ -1675,8 +1773,16 @@
   }
 
   function updateCustomVisibility(forceOpen = false) {
-    customControls.hidden = !forceOpen;
+    if (customFieldsScroll) customFieldsScroll.hidden = !forceOpen;
     if (forceOpen) presetSelect.value = 'custom';
+    if (forceOpen && customControls) {
+      requestAnimationFrame(() => {
+        customControls.scrollIntoView({
+          block: 'nearest',
+          behavior: 'smooth'
+        });
+      });
+    }
   }
 
   function showMenu() {
@@ -3790,13 +3896,13 @@
 
   presetSelect.addEventListener('change', () => {
     if (presetSelect.value !== 'custom') {
-      customControls.hidden = true;
+      if (customFieldsScroll) customFieldsScroll.hidden = true;
     }
   });
 
   if (toggleCustomBtn) {
     toggleCustomBtn.addEventListener('click', () => {
-      updateCustomVisibility(customControls.hidden);
+      updateCustomVisibility(customFieldsScroll ? customFieldsScroll.hidden : true);
     });
   }
 
@@ -3849,6 +3955,9 @@
   });
 
   window.addEventListener('resize', () => {
+    lockWindowScrollPosition();
+    updateViewportHeight();
+    clampBoardPan();
     syncMobileViewportState();
     maybeShowControlsHint();
     if (state.screen !== 'game') return;
@@ -3857,6 +3966,9 @@
   });
 
   window.addEventListener('orientationchange', () => {
+    lockWindowScrollPosition();
+    updateViewportHeight();
+    clampBoardPan();
     syncMobileViewportState();
     maybeShowControlsHint();
     if (state.screen !== 'game') return;
@@ -3866,6 +3978,9 @@
 
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
+      lockWindowScrollPosition();
+      updateViewportHeight();
+      clampBoardPan();
       syncMobileViewportState();
       maybeShowControlsHint();
       if (state.screen !== 'game') return;

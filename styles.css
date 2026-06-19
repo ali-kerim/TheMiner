@@ -7,6 +7,10 @@
   --muted:#a9afc7;
   --accent:#6ea8fe;
   --danger:#ff5c78;
+  --bg-color:#07151d;
+  --panel-bg:rgba(15, 35, 45, 0.92);
+  --text-color:#ffffff;
+  --muted-text-color:rgba(255,255,255,0.75);
   --app-height:100dvh;
   --app-font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
   --menu-card: linear-gradient(180deg, rgba(20,26,44,.88), rgba(10,12,18,.92));
@@ -66,15 +70,18 @@ body[data-theme="medieval"]{
 html,body{
   width:100%;
   height:100%;
+  min-height:100%;
   margin:0;
   padding:0;
-  overflow:hidden;
+  overflow:hidden !important;
+  background-color:var(--bg-color);
+  color:var(--text-color);
   user-select:none;
   -webkit-user-select:none;
   -webkit-touch-callout:none;
   -webkit-tap-highlight-color:transparent;
   touch-action:none;
-  overscroll-behavior:none;
+  overscroll-behavior:none !important;
 }
 [hidden]{
   display:none !important;
@@ -83,11 +90,36 @@ body{
   margin:0;
   width:100%;
   height:100%;
+  min-height:100%;
   padding:0;
   font-family:var(--app-font);
+  background-color:#07151d;
   background: radial-gradient(1200px 800px at 20% 0%, #172042 0%, var(--bg0) 45%, #090a0f 100%);
+  color:#fff;
   color:var(--text);
   overflow:hidden;
+}
+
+@media (pointer: coarse){
+  html,
+  body{
+    position:fixed;
+    inset:0;
+  }
+}
+
+html.touch-lock,
+body.touch-lock{
+  width:100%;
+  height:100%;
+  overflow:hidden !important;
+  overscroll-behavior:none !important;
+  touch-action:none !important;
+}
+
+body.touch-lock{
+  position:fixed;
+  inset:0;
 }
 
 body.isIosSafari{
@@ -130,6 +162,14 @@ label,
   -webkit-user-select:none;
   -webkit-touch-callout:none;
   -webkit-tap-highlight-color:transparent;
+}
+
+button{
+  touch-action:manipulation;
+}
+
+select{
+  touch-action:manipulation;
 }
 
 .languageToggle{
@@ -179,11 +219,93 @@ body[data-theme="medieval"]{
 .app{
   width:100%;
   height:100dvh;
+  max-height:100dvh;
   min-height:var(--app-height);
   display:flex;
   flex-direction:column;
   padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
   gap:10px;
+  background-color:inherit;
+  color:inherit;
+  overflow:hidden;
+  overscroll-behavior:none;
+}
+
+#app,
+.game-root,
+.game-container{
+  background-color:inherit;
+  color:inherit;
+  width:100%;
+  height:calc(var(--vh, 1vh) * 100);
+  overflow:hidden !important;
+  overscroll-behavior:none !important;
+  position:fixed;
+  inset:0;
+}
+
+#app,
+.game-root,
+.game-container,
+.screen,
+.menuScreen,
+.gameScreen,
+.menu-screen,
+.game-screen{
+  overscroll-behavior:none;
+  overflow:hidden;
+  -webkit-user-select:none;
+  user-select:none;
+  -webkit-touch-callout:none;
+}
+
+.menuContent,
+.menu-content{
+  height:100%;
+  overflow:hidden !important;
+  touch-action:none;
+  overscroll-behavior:none;
+  display:grid;
+  place-items:center;
+}
+
+.customFieldsScroll,
+.custom-fields-scroll{
+  max-height:min(42dvh, 260px);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+}
+
+.menuTitle,
+.gameTitle,
+h1,
+h2{
+  touch-action:none;
+  -webkit-user-select:none;
+  user-select:none;
+}
+
+html.touch-lock #app,
+html.touch-lock .game-root,
+html.touch-lock .game-container,
+body.touch-lock #app,
+body.touch-lock .game-root,
+body.touch-lock .game-container{
+  position:fixed;
+  inset:0;
+  width:100vw;
+  height:calc(var(--vh, 1vh) * 100);
+  overflow:hidden !important;
+  overscroll-behavior:none !important;
+}
+
+body.touch-device .app{
+  width:100%;
+  height:100dvh;
+  max-height:100dvh;
   overflow:hidden;
   overscroll-behavior:none;
 }
@@ -199,41 +321,52 @@ body.isIosSafari .app{
 }
 
 .menuScreen,
-.gameScreen{
+.gameScreen,
+.menu-screen,
+.game-screen{
+  height:100%;
   min-height:0;
   flex:1 1 auto;
   width:100%;
 }
 
-.menuScreen,
+.customFieldsScroll,
+.custom-fields-scroll,
 .menuCard{
   overscroll-behavior:contain;
 }
 
-.menuScreen{
-  display:grid;
-  place-items:center;
-  position:relative;
+.menuScreen,
+.menu-screen{
+  display:block;
+  position:fixed;
+  inset:0;
   isolation:isolate;
   margin:calc(-1 * max(10px, env(safe-area-inset-top))) calc(-1 * max(10px, env(safe-area-inset-right))) calc(-1 * max(10px, env(safe-area-inset-bottom))) calc(-1 * max(10px, env(safe-area-inset-left)));
   padding:max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  overflow:hidden;
   background:
     linear-gradient(90deg, rgba(7,8,12,.82), rgba(7,8,12,.42) 45%, rgba(7,8,12,.80)),
     linear-gradient(180deg, rgba(7,8,12,.30), rgba(7,8,12,.74)),
     var(--menu-back) center / cover no-repeat;
+  touch-action:none;
 }
 
-.gameScreen{
+.gameScreen,
+.game-screen{
   display:flex;
   flex-direction:column;
   gap:10px;
+  height:100%;
   min-height:0;
   position:relative;
   overflow:hidden;
   overscroll-behavior:none;
+  touch-action:none;
 }
 
-body.isIosSafari .menuScreen,
+body.isIosSafari .customFieldsScroll,
+body.isIosSafari .custom-fields-scroll,
 body.isIosSafari .menuCard{
   -webkit-overflow-scrolling:touch;
 }
@@ -627,6 +760,12 @@ body.needsLandscape .gameScreen > :not(.rotateNotice){
   overscroll-behavior:none;
 }
 
+body.touch-device .stage{
+  overflow:hidden;
+  overscroll-behavior:none;
+  touch-action:none;
+}
+
 .board{
   width:100%;
   height:100%;
@@ -702,6 +841,8 @@ body.needsLandscape .gameScreen > :not(.rotateNotice){
   max-width:min(520px, calc(100vw - 24px));
   max-height:calc(100dvh - 24px);
   overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
   pointer-events:auto;
   touch-action:manipulation;
 }
@@ -768,12 +909,16 @@ kbd{
   touch-action:manipulation;
   z-index:9999;
   pointer-events:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
 }
 .popup,
 .game-over-modal{
   touch-action:manipulation;
   pointer-events:auto;
   z-index:9999;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
 }
 .modal-open .board,
 .modal-open .milestonePopup{
@@ -806,6 +951,8 @@ body.controls-open .controls-popup button{
   pointer-events:auto;
   animation:popIn .14s ease-out;
   transform-origin:50% 60%;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
 }
 @keyframes popIn{
   from{transform:translateY(6px) scale(.98);opacity:0}
@@ -1063,15 +1210,17 @@ body.controls-open .controls-popup button{
   }
 
   .menuScreen{
-    place-items:start center;
     padding:max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
-    overflow:auto;
+  }
+
+  .menuContent,
+  .menu-content{
+    place-items:start center;
   }
 
   .menuCard{
     width:min(100%, 560px);
     max-height:calc(100svh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-    overflow:auto;
     padding:20px 16px;
     gap:12px;
     margin:auto 0;
@@ -1289,15 +1438,17 @@ body.isMobileDevice .app{
 }
 
 body.isMobileDevice .menuScreen{
-  place-items:center;
   padding:max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
-  overflow:auto;
+}
+
+body.isMobileDevice .menuContent,
+body.isMobileDevice .menu-content{
+  place-items:center;
 }
 
 body.isMobileDevice .menuCard{
   width:min(100%, 560px);
   max-height:calc(100svh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-  overflow:auto;
   padding:16px 14px;
   gap:10px;
   margin:auto;
