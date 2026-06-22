@@ -495,7 +495,8 @@ body.needsLandscape .gameScreen > :not(.rotateNotice){
   border-radius:12px;
   justify-content:space-between;
   justify-self:center;
-  width:min(100%, var(--panel-width, 420px));
+  /* width:min(100%, var(--panel-width, 420px)); */
+  width:500px;
 }
 
 .counter{
