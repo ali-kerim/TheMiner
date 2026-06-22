@@ -287,6 +287,10 @@
       controls: 'Управление',
       lmb_open: 'ЛКМ открыть',
       rmb_flag: 'ПКМ флажок',
+      lmb_open_cell: 'ЛКМ — открыть клетку',
+      rmb_toggle_flag: 'ПКМ — поставить/снять флаг',
+      zoom_controls: 'Колесо / +/- — масштаб',
+      pan_controls: 'Перетаскивание — перемещение поля',
       long_press_flag: 'Долгое нажатие флажок (тач)',
       click_number_open: 'Клик по цифре открыть вокруг',
       victory_title: 'Победа!',
@@ -358,6 +362,10 @@
       controls: 'Controls',
       lmb_open: 'LMB open',
       rmb_flag: 'RMB flag',
+      lmb_open_cell: 'LMB - open cell',
+      rmb_toggle_flag: 'RMB - place/remove flag',
+      zoom_controls: 'Wheel / +/- - zoom',
+      pan_controls: 'Drag - move board',
       long_press_flag: 'Long press flag (touch)',
       click_number_open: 'Click number to open around',
       victory_title: 'Victory!',
@@ -1342,6 +1350,12 @@
 
     const hintTitle = document.getElementById('hintTitle') || document.querySelector('.hintHeader .hintTitle') || document.querySelector('.hintTitle');
     if (hintTitle) hintTitle.textContent = t('controls');
+    const desktopControlsTitle = document.querySelector('.desktop-controls-title');
+    if (desktopControlsTitle) desktopControlsTitle.textContent = t('controls');
+    const desktopControlsOpen = document.getElementById('desktopControlsOpen');
+    const desktopControlsFlag = document.getElementById('desktopControlsFlag');
+    if (desktopControlsOpen) desktopControlsOpen.textContent = t('lmb_open_cell');
+    if (desktopControlsFlag) desktopControlsFlag.textContent = t('rmb_toggle_flag');
     if (hintCloseBtn) hintCloseBtn.setAttribute('aria-label', t('close'));
     if (hintDismissBtn) hintDismissBtn.textContent = currentLanguage === 'ru' ? 'Понятно' : 'Got it';
     const hintRows = document.querySelectorAll('.hintBody div');

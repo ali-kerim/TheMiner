@@ -866,6 +866,31 @@ body.touch-device .stage{
   display:grid;
   gap:4px;
 }
+.desktop-controls-panel{
+  position:fixed;
+  right:16px;
+  bottom:16px;
+  max-width:260px;
+  padding:12px 14px;
+  border-radius:12px;
+  background:var(--panel-bg, rgba(15, 35, 45, 0.92));
+  color:var(--text-color, #fff);
+  box-shadow:0 8px 24px rgba(0,0,0,.25);
+  z-index:1000;
+  pointer-events:none;
+  display:grid;
+  gap:6px;
+  font-size:13px;
+  line-height:1.4;
+}
+.desktop-controls-title{
+  font-size:14px;
+  font-weight:800;
+  line-height:1.2;
+}
+.desktop-controls-panel div:not(.desktop-controls-title){
+  color:rgba(255,255,255,.86);
+}
 .hintActions{
   display:none;
   margin-top:12px;
@@ -1254,6 +1279,17 @@ body.controls-open .controls-popup button{
   .menuInputField input{
     width:92px;
   }
+}
+
+@media (pointer: coarse), (hover: none), (max-width: 900px) {
+  .desktop-controls-panel{
+    display:none !important;
+  }
+}
+
+body.modal-open .desktop-controls-panel,
+body.controls-open .desktop-controls-panel{
+  display:none !important;
 }
 
 @media (pointer: coarse) and (max-width: 900px) and (orientation: landscape){
