@@ -495,7 +495,7 @@ body.needsLandscape .gameScreen > :not(.rotateNotice){
   border-radius:12px;
   justify-content:space-between;
   justify-self:center;
-  /* width:min(100%, var(--panel-width, 420px)); */
+  width:min(100%, var(--panel-width, 420px));
   width:500px;
 }
 
@@ -1114,7 +1114,7 @@ body.controls-open .controls-popup button{
     grid-row:auto;
     justify-self:stretch;
     order:1;
-    width:100%;
+    width:min(100%, 400px);
   }
   .hintControl,
   .controls{
@@ -1323,6 +1323,7 @@ body.controls-open .desktop-controls-panel{
   }
 
   .panel{
+    width:min(100%, 400px);
     padding:4px 6px;
     gap:6px;
     border-radius:9px;
@@ -1595,6 +1596,7 @@ body.isShortViewport .milestonePopup{
 }
 
 body.isMobileLandscape .panel{
+  width:min(100%, 400px);
   padding:4px 6px;
   gap:6px;
   border-radius:9px;
