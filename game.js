@@ -1359,10 +1359,10 @@
     if (hintCloseBtn) hintCloseBtn.setAttribute('aria-label', t('close'));
     if (hintDismissBtn) hintDismissBtn.textContent = currentLanguage === 'ru' ? 'Понятно' : 'Got it';
     const hintRows = document.querySelectorAll('.hintBody div');
-    if (hintRows[0]) hintRows[0].innerHTML = currentLanguage === 'ru' ? '<kbd>ЛКМ</kbd> открыть' : '<kbd>LMB</kbd> open';
-    if (hintRows[1]) hintRows[1].innerHTML = currentLanguage === 'ru' ? '<kbd>ПКМ</kbd> флажок' : '<kbd>RMB</kbd> flag';
-    if (hintRows[2]) hintRows[2].innerHTML = currentLanguage === 'ru' ? '<kbd>Долгое нажатие</kbd> флажок (тач)' : '<kbd>Long press</kbd> flag (touch)';
-    if (hintRows[3]) hintRows[3].innerHTML = currentLanguage === 'ru' ? '<kbd>Клик по цифре</kbd> открыть вокруг' : '<kbd>Number click</kbd> open around';
+    if (hintRows[0]) hintRows[0].innerHTML = currentLanguage === 'ru' ? '<kbd>Клик</kbd> открыть клетку' : '<kbd>Click</kbd> open cell';
+    if (hintRows[1]) hintRows[1].innerHTML = currentLanguage === 'ru' ? '<kbd>Долгое нажатие</kbd> поставить/снять флаг' : '<kbd>Long press</kbd> place/remove flag';
+    if (hintRows[2]) hintRows[2].remove();
+    if (hintRows[3]) hintRows[3].remove();
 
     if (victoryModal) victoryModal.setAttribute('aria-label', t('victory_title'));
     if (lossModal) lossModal.setAttribute('aria-label', t('loss_title'));
