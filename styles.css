@@ -1114,7 +1114,7 @@ body.controls-open .controls-popup button{
     grid-row:auto;
     justify-self:stretch;
     order:1;
-    width:min(100%, 400px);
+    width:min(100%, 220px);
   }
   .hintControl,
   .controls{
@@ -1323,7 +1323,7 @@ body.controls-open .desktop-controls-panel{
   }
 
   .panel{
-    width:min(100%, 400px);
+    width:min(100%, 220px);
     padding:4px 6px;
     gap:6px;
     border-radius:9px;
@@ -1596,7 +1596,7 @@ body.isShortViewport .milestonePopup{
 }
 
 body.isMobileLandscape .panel{
-  width:min(100%, 400px);
+  width:min(100%, 220px);
   padding:4px 6px;
   gap:6px;
   border-radius:9px;
