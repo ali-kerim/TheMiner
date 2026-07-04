@@ -4035,14 +4035,21 @@
   syncControlsHintUi();
   syncSoundVolumes();
   applyTheme(currentThemeKey);
-  // Apply a fallback language immediately, then let SDK startup auto-detection
-  // replace it during launch when no manual language preference is stored.
+  const deferInitialMenuUntilSdkLanguage = isEmbeddedRuntime() && !storedLanguagePreference;
+  // Apply a fallback language immediately for local boot, but in embedded
+  // startup delay the first visible menu until SDK language detection finishes.
   applyLanguage(currentLanguage, false, Boolean(storedLanguagePreference));
-  initYandexSdk().then((ysdk) => {
+  const startupSdkPromise = initYandexSdk().then((ysdk) => {
     const launchLanguage = readYandexLanguage(ysdk) || currentLanguage;
     if (storedLanguagePreference) return ysdk;
     applyLanguage(launchLanguage, false, false);
     return ysdk;
   });
-  showMenu();
+  if (deferInitialMenuUntilSdkLanguage) {
+    startupSdkPromise.finally(() => {
+      showMenu();
+    });
+  } else {
+    showMenu();
+  }
 })();
