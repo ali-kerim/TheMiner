@@ -156,6 +156,7 @@
     initPromise: null,
     scriptPromise: null,
     playerPromise: null,
+    sdkInitFinished: false,
     loadingReadySent: false,
     menuReady: false,
     adShowing: false,
@@ -463,6 +464,10 @@
       .catch((err) => {
         console.warn('Yandex Games SDK init failed', err);
         return null;
+      })
+      .finally(() => {
+        yandex.sdkInitFinished = true;
+        syncPlayButtonUi();
       });
 
     return yandex.initPromise;
@@ -679,9 +684,27 @@
     try {
       yandex.ysdk.features?.LoadingAPI?.ready?.();
       yandex.loadingReadySent = true;
+      syncPlayButtonUi();
     } catch (err) {
       console.warn('Yandex LoadingAPI.ready failed', err);
     }
+  }
+
+  function isPlayButtonLaunchBlocked() {
+    if (!isEmbeddedRuntime()) return false;
+    if (yandex.loadingReadySent) return false;
+    if (yandex.sdkInitFinished && !yandex.ysdk) return false;
+    return true;
+  }
+
+  function syncPlayButtonUi() {
+    if (!playBtn) return;
+    const launchBlocked = isPlayButtonLaunchBlocked();
+    const buttonLabel = launchBlocked ? t('loading') : t('play');
+    playBtn.disabled = launchBlocked;
+    playBtn.setAttribute('aria-disabled', launchBlocked ? 'true' : 'false');
+    playBtn.textContent = buttonLabel;
+    playBtn.title = buttonLabel;
   }
 
   function pauseGameIfNeeded() {
@@ -1317,7 +1340,7 @@
 
     if (recordsBtn) recordsBtn.textContent = t('records');
     if (toggleCustomBtn) toggleCustomBtn.textContent = t('custom_field');
-    if (playBtn) playBtn.textContent = t('play');
+    syncPlayButtonUi();
     if (menuBtn) menuBtn.textContent = t('menu');
     if (hintBtn) {
       hintBtn.setAttribute('aria-label', t('hint'));
@@ -2839,7 +2862,7 @@
   let playButtonStartLocked = false;
 
   function handlePlayButtonPress() {
-    if (playButtonStartLocked) return;
+    if (playButtonStartLocked || isPlayButtonLaunchBlocked()) return;
     playButtonStartLocked = true;
     startGame();
     window.setTimeout(() => {

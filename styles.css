@@ -741,6 +741,10 @@ body.needsLandscape .gameScreen > :not(.rotateNotice){
   border-color:rgba(110,168,254,.55);
   background:linear-gradient(180deg, rgba(110,168,254,.32), rgba(110,168,254,.12));
 }
+.btn:disabled{
+  opacity:.6;
+  cursor:default;
+}
 .btn:active{transform:translateY(1px)}
 
 .custom{
